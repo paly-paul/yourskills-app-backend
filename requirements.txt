@@ -3,3 +3,12 @@ uvicorn
 sqlalchemy
 python-dotenv
 pydantic
+pydantic_settings
+psycopg2-binary
+pydantic[email]
+passlib
+python-jose
+google-generativeai
+python-multipart
+python-docx
+PyMuPDF
