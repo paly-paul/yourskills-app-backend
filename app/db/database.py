@@ -8,7 +8,7 @@ SQLALCHEMY_DATABASE_URL = settings.DB_URL
 # Create the engine
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    pool_pre_ping=True  # Ensures stale connections are handled
+    pool_pre_ping=True
 )
 
 # Create a configured "Session" class
