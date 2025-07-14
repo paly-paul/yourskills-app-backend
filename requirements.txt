@@ -11,4 +11,4 @@ python-jose
 google-generativeai
 python-multipart
 python-docx
-PyMuPDF
+PyJWT

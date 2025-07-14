@@ -2,6 +2,8 @@ from pydantic import BaseModel, EmailStr
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+from typing import Optional, Union
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 class UserCreate(BaseModel):
     username: str
@@ -9,8 +11,19 @@ class UserCreate(BaseModel):
     password: str
 
 class UserLogin(BaseModel):
-    username: str
+    username: Optional[str] = None
+    email: Optional[Union[EmailStr, str]] = None
     password: str
+    @field_validator("email", mode="before")
+    @classmethod
+    def empty_string_to_none(cls, v):
+        return v or None
+
+    @model_validator(mode="after")
+    def check_identifier(cls, values):
+        if not values.username and not values.email:
+            raise ValueError("Either username or email must be provided")
+        return values
 
 class UserResponse(BaseModel):
     id: int

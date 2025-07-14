@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     API_VERSION: str = 'v1'
     DB_URL: str 
     GEMINI_API_KEY: str
+    JWT_SECRET: str
 
     class Config:
         env_file = ".env"
