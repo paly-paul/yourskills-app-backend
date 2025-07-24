@@ -9,12 +9,16 @@ from app.models import Upload, UserProfile, Skill, UserSkill
 from sqlalchemy.orm import Session
 from datetime import datetime
 import os
+from app.utils.hash import generate_tenant_id
+
 
 def create_user(db: Session, user: UserCreate):
+    tenant_id = generate_tenant_id()
     db_user = User(
         username=user.username,
         email=user.email,
-        password=hash_password(user.password)
+        password=hash_password(user.password),
+        tenant_id=tenant_id
     )
     db.add(db_user)
     db.commit()

@@ -34,7 +34,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     token_data = {"user_id": created_user.id, "username": created_user.username}
     access_token = create_access_token(token_data)
 
-    return {"success": True, "token": access_token}
+    return {"success": True, "token": access_token,"tenant_id": created_user.tenant_id}
 
 
 @router.post("/login")
@@ -54,7 +54,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     token_data = {"user_id": db_user.id, "username": db_user.username}
     access_token = create_access_token(token_data)
 
-    return {"success": True, "token": access_token}
+    return {"success": True, "token": access_token,"tenant_id": db_user.tenant_id}
 
 
 @router.get("/profile")
