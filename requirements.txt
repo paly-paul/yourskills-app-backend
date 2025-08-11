@@ -12,3 +12,5 @@ google-generativeai
 python-multipart
 python-docx
 PyJWT
+python-dateutil
+motor

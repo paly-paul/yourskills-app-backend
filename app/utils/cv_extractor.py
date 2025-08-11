@@ -14,7 +14,7 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 
 def parse_duration(duration_str):
     try:
-        parts = re.split(r"\s*[-–—]\s*", duration_str)  # Handles -, –, —
+        parts = re.split(r"\s*[-–—]\s*", duration_str)  
         if len(parts) != 2:
             return None
 
@@ -163,7 +163,6 @@ Return only valid JSON. Start your response with `{` and end with `}`. No markdo
 
         parsed_json = json.loads(response_text)
 
-        # Update years of experience based on WorkExperience
         work_exp = parsed_json.get("WorkExperience", [])
         parsed_json["YearsOfExperience"] = calculate_years_of_experience(work_exp)
 

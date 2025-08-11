@@ -1,82 +1,90 @@
-from sqlalchemy.orm import Session
-from app.models import User
-from app.schemas import UserCreate
-from app.utils import hash_password
-from app.models import User
-from app.utils.hash import hash_password, generate_temp_password
-from sqlalchemy.orm import Session
-from app.models import Upload, UserProfile, Skill, UserSkill
-from sqlalchemy.orm import Session
 from datetime import datetime
 import os
-from app.utils.hash import generate_tenant_id
+from typing import Optional, Dict, Any
 
+from bson import ObjectId
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
-def create_user(db: Session, user: UserCreate):
+from app.utils.hash import hash_password, generate_temp_password, generate_tenant_id
+
+async def create_user(db: AsyncIOMotorDatabase, user: Dict[str, Any]) -> Dict[str, Any]:
     tenant_id = generate_tenant_id()
-    db_user = User(
-        username=user.username,
-        email=user.email,
-        password=hash_password(user.password),
-        tenant_id=tenant_id
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    new_user = {
+        "username": user.username,
+        "email": user.email,
+        "password": hash_password(user.password),
+        "tenant_id": tenant_id,
+        "created_at": datetime.utcnow(),
+        "is_temp_password": False
+    }
+    result = await db.users.insert_one(new_user)
+    new_user["_id"] = result.inserted_id
+    return new_user
 
-def get_user_by_username(db: Session, username: str):
-    return db.query(User).filter(User.username == username).first()
+async def get_user_by_username(db: AsyncIOMotorDatabase, username: str) -> Optional[Dict[str, Any]]:
+    return await db.users.find_one({"username": username})
 
-def forgot_password(db: Session, email: str) -> str | None:
-    user = db.query(User).filter(User.email == email).first()
+async def forgot_password(db: AsyncIOMotorDatabase, email: str) -> Optional[str]:
+    user = await db.users.find_one({"email": email})
     if not user:
         return None
 
     temp_pass = generate_temp_password()
-    user.password = hash_password(temp_pass)
-    user.is_temp_password = True
-    db.commit()
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "password": hash_password(temp_pass),
+            "is_temp_password": True
+        }}
+    )
     return temp_pass
 
-def save_extracted_cv_data(user_id: int, parsed_data: dict, file_path: str, db: Session):
+async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_data: dict, file_path: str) -> Dict[str, Any]:
     file_url = f"/uploads/{os.path.basename(file_path)}"
-    
-    upload = Upload(
-        user_id=user_id,
-        file_url=file_url,
-        source="cv",
-        parsed_data=parsed_data,
-        uploaded_at=datetime.utcnow()
-    )
-    db.add(upload)
 
-    existing = db.query(UserProfile).filter_by(user_id=user_id).first()
-    if not existing:
-        profile = UserProfile(
-            user_id=user_id,
-            bio=parsed_data.get("Summary", ""),
-            education_summary=", ".join([edu.get("Degree", "") for edu in parsed_data.get("Education", [])]),
-            years_experience=parsed_data.get("YearsExperience", 0)
-        )
-        db.add(profile)
-    else:
-        existing.bio = parsed_data.get("Summary", "")
-        existing.education_summary = ", ".join([edu.get("Degree", "") for edu in parsed_data.get("Education", [])])
-        existing.years_experience = parsed_data.get("YearsExperience", 0)
+    upload_doc = {
+        "user_id": ObjectId(user_id),
+        "file_url": file_url,
+        "source": "cv",
+        "parsed_data": parsed_data,
+        "uploaded_at": datetime.utcnow()
+    }
+    await db.uploads.insert_one(upload_doc)
+
+    profile_update = {
+        "bio": parsed_data.get("Summary", ""),
+        "education_summary": ", ".join([edu.get("Degree", "") for edu in parsed_data.get("Education", [])]),
+        "years_experience": parsed_data.get("YearsOfExperience", 0)
+    }
+    await db.user_profiles.update_one(
+        {"user_id": ObjectId(user_id)},
+        {"$set": profile_update},
+        upsert=True
+    )
 
     for skill_type in ["HardSkills", "SoftSkills"]:
         skill_list = parsed_data.get("Skills", {}).get(skill_type, [])
         for skill_name in skill_list:
-            skill = db.query(Skill).filter_by(name=skill_name).first()
-            if not skill:
-                skill = Skill(name=skill_name, type="hard" if skill_type == "HardSkills" else "soft")
-                db.add(skill)
-                db.flush()
-            
-            if not db.query(UserSkill).filter_by(user_id=user_id, skill_id=skill.id).first():
-                user_skill = UserSkill(user_id=user_id, skill_id=skill.id)
-                db.add(user_skill)
+    
+            skill_doc = await db.skills.find_one({"name": skill_name})
+            if not skill_doc:
+                skill_doc = {
+                    "name": skill_name,
+                    "type": "hard" if skill_type == "HardSkills" else "soft"
+                }
+                result = await db.skills.insert_one(skill_doc)
+                skill_id = result.inserted_id
+            else:
+                skill_id = skill_doc["_id"]
 
-    db.commit()
+            existing_link = await db.user_skills.find_one({
+                "user_id": ObjectId(user_id),
+                "skill_id": skill_id
+            })
+            if not existing_link:
+                await db.user_skills.insert_one({
+                    "user_id": ObjectId(user_id),
+                    "skill_id": skill_id
+                })
+
     return {"message": "CV data extracted and saved successfully"}

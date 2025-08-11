@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = 'Skill Snapshot'
     API_VERSION: str = 'v1'
     DB_URL: str 
+    MONGO_DB: str
     GEMINI_API_KEY: str
     JWT_SECRET: str
 

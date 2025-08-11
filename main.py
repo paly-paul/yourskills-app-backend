@@ -1,21 +1,27 @@
+# main.py
 from fastapi import FastAPI
 from app.api.router import router
-from app.db.database import Base, engine
+from app.db.database import connect_to_mongo, close_mongo_connection
 from fastapi.openapi.utils import get_openapi
-
-# Auto-create tables (run once at startup)
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Skill Snapshot API",
     version="v1"
 )
 
+@app.on_event("startup")
+async def startup_db_client():
+    await connect_to_mongo()
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    await close_mongo_connection()
+
 @app.get("/")
 def read_root():
     return {"msg": "Skill Snapshot API is live"}
 
-# Include all API routes (register/login/etc.)
+
 app.include_router(router)
 
 def custom_openapi():
@@ -39,6 +45,5 @@ def custom_openapi():
             operation["security"] = [{"bearerAuth": []}]
     app.openapi_schema = openapi_schema
     return app.openapi_schema
-
 
 app.openapi = custom_openapi

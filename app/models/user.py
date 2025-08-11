@@ -1,48 +1,71 @@
-from sqlalchemy import Column, Integer, String, Boolean
-from app.db.database import Base
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, DateTime, JSON
-from sqlalchemy.orm import relationship
+
 from datetime import datetime
-from app.db.database import Base
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, EmailStr, Field
+import uuid
 
-class User(Base):
-    __tablename__ = "users"
+def generate_uuid() -> str:
+    return str(uuid.uuid4())
 
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    password = Column(String)
-    is_temp_password = Column(Boolean, default=False)
-    tenant_id = Column(String, unique=True, index=True)
+class UserModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")  
+    tenant_id: str = Field(default_factory=generate_uuid)
+    name: str
+    email: EmailStr
+    password_hash: str
+    stage: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+
+class SkillModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")
+    name: str
+    type: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
 
 
-class UserProfile(Base):
-    __tablename__ = "user_profiles"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    bio = Column(Text)
-    photo_url = Column(String)
-    education_summary = Column(Text)
-    years_experience = Column(Integer)
+class UserSkillModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")
+    user_id: str
+    skill_id: str
+    tenant_id: str
+    source: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class Skill(Base):
-    __tablename__ = "skills"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True)
-    type = Column(String) 
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
 
-class UserSkill(Base):
-    __tablename__ = "user_skills"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    skill_id = Column(Integer, ForeignKey("skills.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+class UserProfileModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")
+    user_id: str
+    tenant_id: str
+    bio: Optional[str] = None
+    photo_url: Optional[str] = None
+    education_summary: Optional[str] = None
+    years_experience: Optional[int] = None
 
-class Upload(Base):
-    __tablename__ = "uploads"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    file_url = Column(String)
-    source = Column(String) 
-    parsed_data = Column(JSON)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+
+
+class UploadModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")
+    user_id: str
+    tenant_id: str
+    file_url: str
+    source: Optional[str] = None
+    parsed_data: Dict[str, Any]
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
