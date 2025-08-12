@@ -1,0 +1,56 @@
+[
+  {
+    "parameter": "Education",
+    "questionText": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
+    "type": ["multi-select", "dropdown", "free-text"],
+    "iconFileName": "education"
+  },
+  {
+    "parameter": "Experience",
+    "questionText": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
+    "type": ["short-text", "edit-view"],
+    "iconFileName": "experience"
+  },
+  {
+    "parameter": "Technical Skills",
+    "questionText": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
+    "type": ["multi-select", "text-entry"],
+    "iconFileName": "technical_skills"
+  },
+  {
+    "parameter": "Soft Skills",
+    "questionText": "Which soft skills come naturally to you — like how you communicate, solve problems, or support your team?",
+    "type": ["multi-select", "text-entry"],
+    "iconFileName": "soft_skills"
+  },
+  {
+    "parameter": "Certifications",
+    "questionText": "Have you done any certifications, courses, or attended workshops recently?",
+    "type": ["short-text", "edit-view"],
+    "iconFileName": "certifications"
+  },
+  {
+    "parameter": "Salary Grades",
+    "questionText": "If you’re comfortable sharing, what’s your current or expected salary range? Totally okay to skip if you’d rather not say!",
+    "type": ["multi-select"],
+    "iconFileName": "salary"
+  },
+  {
+    "parameter": "Projects",
+    "questionText": "Have you worked on any cool projects (college, work, or side projects) that you’d love to share? Big or small – all count!",
+    "type": ["short-text", "edit-view"],
+    "iconFileName": "projects"
+  },
+  {
+    "parameter": "Languages Known",
+    "questionText": "What languages can you speak, read, or write? let me know your level — like fluent, basic, or somewhere in between.",
+    "type": ["multi-select", "confidence-level"],
+    "iconFileName": "languages"
+  },
+  {
+    "parameter": "Career Objective",
+    "questionText": "If you had to describe yourself in your current career — like what you do, what drives you, and what kind of work excites you — how would you put it in a few lines?",
+    "type": ["short-text"],
+    "iconFileName": "career_objective"
+  }
+]

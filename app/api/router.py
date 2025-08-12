@@ -106,5 +106,21 @@ async def extract_cv(
         "message": "CV data extracted and saved successfully"
     }
 
+# =========================
+# NEW: Get all questions API
+# =========================
+@router.get("/questions")
+async def get_all_questions(db=Depends(get_database)):
+    questions_cursor = db["questions"].find({})
+    questions = []
+    async for q in questions_cursor:
+        q["_id"] = str(q["_id"])  # convert ObjectId to string for JSON
+        questions.append(q)
+
+    return {
+        "success": True,
+        "count": len(questions),
+        "questions": questions
+    }
 
 
