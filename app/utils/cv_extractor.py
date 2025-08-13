@@ -12,18 +12,35 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-1.5-flash")
 
+
+from datetime import datetime
+import re
+from dateutil import parser as date_parser
+
 def parse_duration(duration_str):
     try:
-        parts = re.split(r"\s*[-–—]\s*", duration_str)  
+        duration_str = duration_str.replace("’", "'").replace("‘", "'").strip()
+        duration_str = re.sub(r"\s+", " ", duration_str)
+        duration_str = re.sub(r"\(.*?\)", "", duration_str)
+
+        parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
         if len(parts) != 2:
             return None
 
         start_str, end_str = parts[0].strip(), parts[1].strip().lower()
-        start_date = date_parser.parse(start_str)
-        if "present" in end_str or "now" in end_str:
+
+        try:
+            start_date = datetime.strptime(start_str, "%m/%Y")
+        except:
+            start_date = date_parser.parse(start_str, fuzzy=True)
+
+        if any(word in end_str for word in ["present", "current", "now"]):
             end_date = datetime.today()
         else:
-            end_date = date_parser.parse(end_str)
+            try:
+                end_date = datetime.strptime(end_str, "%m/%Y")
+            except:
+                end_date = date_parser.parse(end_str, fuzzy=True)
 
         return start_date, end_date
     except Exception as e:
@@ -37,13 +54,38 @@ def calculate_years_of_experience(work_experiences):
         parsed = parse_duration(duration_str)
         if parsed:
             start, end = parsed
-            months = (end.year - start.year) * 12 + (end.month - start.month)
+            
+            months = (end.year - start.year) * 12 + (end.month - start.month) + 1
             total_months += max(0, months)
-    return round(total_months / 12, 1)
+    return round(total_months / 12, 2)
+
+
+
+
+
+def clean_json(obj):
+    if isinstance(obj, dict):
+        return {k: clean_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_json(v) for v in obj]
+    elif obj is None:
+        return ""  
+    return obj
+
+def extract_docx_text(filepath):
+    doc = Document(filepath)
+    texts = [p.text for p in doc.paragraphs if p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                cell_text = cell.text.strip()
+                if cell_text:
+                    texts.append(cell_text)
+    return "\n".join(texts)
 
 def extract_cv_data_from_file(filepath: str, mime_type: str):
-    prompt = """
-You are an expert resume parser.
+    prompt = """ 
+    You are an expert resume parser.
 
 Given a resume file, extract structured JSON with the following fields:
 
@@ -138,10 +180,11 @@ Return only valid JSON. Start your response with `{` and end with `}`. No markdo
 
     try:
         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = Document(filepath)
-            file_text = "\n".join([para.text for para in doc.paragraphs])
+            
+            file_text = extract_docx_text(filepath)
             content_input = [file_text, prompt]
         else:
+           
             file_bytes = pathlib.Path(filepath).read_bytes()
             content_input = [
                 {"mime_type": mime_type, "data": file_bytes},
@@ -162,6 +205,7 @@ Return only valid JSON. Start your response with `{` and end with `}`. No markdo
         response_text = response_text[start_idx:end_idx+1]
 
         parsed_json = json.loads(response_text)
+        parsed_json = clean_json(parsed_json)  
 
         work_exp = parsed_json.get("WorkExperience", [])
         parsed_json["YearsOfExperience"] = calculate_years_of_experience(work_exp)
