@@ -1,4 +1,4 @@
-# main.py
+
 from fastapi import FastAPI
 from app.api.router import router
 from app.db.database import connect_to_mongo, close_mongo_connection

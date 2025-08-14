@@ -12,12 +12,11 @@ import os
 import google.generativeai as genai
 import asyncio
 import json
+from datetime import datetime
 
 router = APIRouter()
 
-# ======================
-# Gemini API setup
-# ======================
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("Missing GEMINI_API_KEY environment variable")
@@ -34,7 +33,6 @@ async def generate_missing_field_suggestions(cv_context: dict, field_types: list
     """
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
 
-    # Determine CV type (basic heuristic)
     cv_type = cv_context.get("Summary", "") or cv_context.get("WorkExperience", [])
     if isinstance(cv_type, list):
         cv_type_text = " ".join(str(job.get("Role", "")) for job in cv_type)
@@ -61,7 +59,7 @@ async def generate_missing_field_suggestions(cv_context: dict, field_types: list
     try:
         parsed = json.loads(response.text)
     except Exception:
-        # fallback: basic manual parsing
+
         parsed = {ftype: [] for ftype in field_types}
         lines = (response.text or "").split("\n")
         for line in lines:
@@ -72,7 +70,6 @@ async def generate_missing_field_suggestions(cv_context: dict, field_types: list
                     parsed[ftype] = items
                     break
 
-    # Clean duplicates
     for key, val in parsed.items():
         seen = set()
         cleaned = []
@@ -187,7 +184,7 @@ async def get_missing_field_questions(
     param_to_parsed_key = {
         "Education": "Education",
         "Experience": "WorkExperience",
-        "Technical Skills": "Skills.HardSkills",
+        "Technical Skills": "Skills.HardSkills",  
         "Soft Skills": "Skills.SoftSkills",
         "Certifications": "Certifications",
         "Projects": "Projects",
@@ -196,7 +193,6 @@ async def get_missing_field_questions(
         "Awards": "Awards",
         "Volunteer Experience": "VolunteerExperience",
         "Hobbies": "Hobbies",
-        "Tools": "Tools",
         "Salary Grades": None
     }
 
@@ -206,50 +202,66 @@ async def get_missing_field_questions(
     )
 
     questions_docs = [q async for q in db["questions"].find({})]
-    all_parameters = [q["parameter"] for q in questions_docs]
+
+    missing_parameters = [q for q in questions_docs if "parameter" not in q]
+
+    all_parameters = [
+        q.get("parameter")
+        for q in questions_docs
+        if q.get("parameter") and q["parameter"] != "Tools"
+]
+
     missing_fields = []
 
-    if not latest_cv or "parsed_data" not in latest_cv:
-        missing_fields = all_parameters
-    else:
-        parsed_data = latest_cv["parsed_data"]
-        for param in all_parameters:
-            parsed_key_path = param_to_parsed_key.get(param)
-            if not parsed_key_path:
+    parsed_data = latest_cv.get("parsed_data", {}) if latest_cv else {}
+
+    hard_skills = parsed_data.get("Skills", {}).get("HardSkills", [])
+    tools = parsed_data.get("Tools", [])
+    hard_skills_missing = not hard_skills or (isinstance(hard_skills, list) and len(hard_skills) == 0)
+    tools_missing = not tools or (isinstance(tools, list) and len(tools) == 0)
+    if hard_skills_missing or tools_missing:
+        missing_fields.append("Technical Skills")
+
+    for param in all_parameters:
+        if param == "Technical Skills":
+            continue 
+
+        parsed_key_path = param_to_parsed_key.get(param)
+        if not parsed_key_path:
+            missing_fields.append(param)
+            continue
+
+        keys = parsed_key_path.split(".")
+        value = parsed_data
+        for k in keys:
+            value = value.get(k) if isinstance(value, dict) else None
+            if value is None:
+                break
+
+        if not value or (isinstance(value, list) and len(value) == 0):
+            missing_fields.append(param)
+        elif isinstance(value, dict):
+            if all(not v or (isinstance(v, list) and len(v) == 0) for v in value.values()):
                 missing_fields.append(param)
-                continue
 
-            keys = parsed_key_path.split(".")
-            value = parsed_data
-            for k in keys:
-                value = value.get(k) if isinstance(value, dict) else None
-                if value is None:
-                    break
-
-            if not value or (isinstance(value, list) and len(value) == 0):
-                missing_fields.append(param)
-            elif isinstance(value, dict):
-                if all(not v or (isinstance(v, list) and len(v) == 0) for v in value.values()):
-                    missing_fields.append(param)
-
-    missing_questions = []
-    # Fields that LLM will suggest
     llm_fields_needed = [
-        q["parameter"] for q in questions_docs
-        if q["parameter"] in ("Technical Skills", "Soft Skills", "Certifications") and q["parameter"] in missing_fields
+        q.get("parameter")
+        for q in questions_docs
+        if q.get("parameter") in ("Technical Skills", "Soft Skills", "Certifications")
+        and q.get("parameter") in missing_fields
     ]
 
-    # Gemini suggestions
     suggestions_data = {}
     if llm_fields_needed:
-        cv_context = latest_cv.get("parsed_data", {}) if latest_cv else {}
-        suggestions_data = await generate_missing_field_suggestions(cv_context, llm_fields_needed)
+        suggestions_data = await generate_missing_field_suggestions(parsed_data, llm_fields_needed)
 
+    missing_questions = []
     for q in questions_docs:
-        if q["parameter"] in missing_fields:
+        param = q.get("parameter")
+        if param in missing_fields:
             q_entry = {**q, "_id": str(q["_id"])}
-            if q["parameter"] in suggestions_data:
-                q_entry["options"] = suggestions_data[q["parameter"]]
+            if param in suggestions_data:
+                q_entry["options"] = suggestions_data[param]
             missing_questions.append(q_entry)
 
     return {
@@ -257,4 +269,85 @@ async def get_missing_field_questions(
         "count": len(missing_questions),
         "questions": missing_questions,
         "missing_fields": missing_fields
+    }
+
+
+
+@router.get("/job-questions")
+async def get_audience_questions(
+    db=Depends(get_database),
+    current_user=Depends(get_current_user)
+):
+    # Get the latest uploaded CV for the user
+    latest_cv = await db["uploads"].find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    parsed_data = latest_cv["parsed_data"]
+
+    # ----- Determine Audience Type -----
+    audience_type = None
+
+    # --- 1. Student detection ---
+    education_list = parsed_data.get("Education", [])
+    student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
+
+    for ed in education_list:
+        combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
+        if any(keyword in combined_fields for keyword in student_keywords):
+            audience_type = "Student"
+            break
+
+    # --- 2. Work Experience checks ---
+    work_exp_list = parsed_data.get("WorkExperience", [])
+
+    has_current_job = any(
+        str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"] or
+        str(w.get("endDate", "")).strip().lower() in ["present", "current", "ongoing", ""]
+        for w in work_exp_list
+    )
+
+    # Prefer parsed YearsOfExperience if available
+    if "YearsOfExperience" in parsed_data and isinstance(parsed_data["YearsOfExperience"], (int, float)):
+        total_years = float(parsed_data["YearsOfExperience"])
+    else:
+        # Fallback: calculate from job history
+        total_years = 0
+        for w in work_exp_list:
+            try:
+                start_raw = w.get("startDate")
+                end_raw = w.get("endDate")
+
+                start = datetime.strptime(str(start_raw), "%Y-%m-%d")
+                if not end_raw or str(end_raw).strip().lower() in ["present", "current", "ongoing"]:
+                    end = datetime.today()
+                else:
+                    end = datetime.strptime(str(end_raw), "%Y-%m-%d")
+
+                total_years += (end - start).days / 365
+            except Exception:
+                continue
+
+    # --- 3. Decide audience type ---
+    if not audience_type:  # Only if not student
+        if not has_current_job and total_years < 0.5:
+            audience_type = "Job Seeker"
+        elif total_years <= 3:
+            audience_type = "Early Professional (2-3 years of experience)"
+        else:
+            audience_type = "Mid - Career Pivot"
+
+    # ----- Fetch matching questions -----
+    questions_doc = await db["questions"].find_one({"audienceType": audience_type})
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail=f"No questions found for audience type: {audience_type}")
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": questions_doc.get("questions", [])
     }

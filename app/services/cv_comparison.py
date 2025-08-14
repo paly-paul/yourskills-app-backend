@@ -32,7 +32,7 @@ async def get_cv_summary(parsed_data: dict):
     if parsed_data.get("Tools"):
         known.append("Tools")
     else:
-        unknown.append("Industry")
+        unknown.append("Tools")
 
     if parsed_data.get("Industry"):
         known.append("Industry")
