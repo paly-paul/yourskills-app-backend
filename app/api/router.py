@@ -16,7 +16,6 @@ from datetime import datetime
 
 router = APIRouter()
 
-
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise RuntimeError("Missing GEMINI_API_KEY environment variable")
@@ -26,11 +25,6 @@ gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
 
 async def generate_missing_field_suggestions(cv_context: dict, field_types: list[str]) -> dict[str, list[str]]:
-    """
-    Batch generate missing field suggestions (skills, certifications, etc.)
-    in one Gemini request to reduce latency. Certifications suggestions
-    consider CV type and include general/common certifications.
-    """
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
 
     cv_type = cv_context.get("Summary", "") or cv_context.get("WorkExperience", [])
@@ -59,7 +53,6 @@ async def generate_missing_field_suggestions(cv_context: dict, field_types: list
     try:
         parsed = json.loads(response.text)
     except Exception:
-
         parsed = {ftype: [] for ftype in field_types}
         lines = (response.text or "").split("\n")
         for line in lines:
@@ -209,7 +202,7 @@ async def get_missing_field_questions(
         q.get("parameter")
         for q in questions_docs
         if q.get("parameter") and q["parameter"] != "Tools"
-]
+    ]
 
     missing_fields = []
 
@@ -272,27 +265,9 @@ async def get_missing_field_questions(
     }
 
 
-
-@router.get("/job-questions")
-async def get_audience_questions(
-    db=Depends(get_database),
-    current_user=Depends(get_current_user)
-):
-    # Get the latest uploaded CV for the user
-    latest_cv = await db["uploads"].find_one(
-        {"user_id": ObjectId(current_user["_id"])},
-        sort=[("_id", -1)]
-    )
-
-    if not latest_cv or "parsed_data" not in latest_cv:
-        raise HTTPException(status_code=404, detail="No CV data found for this user")
-
-    parsed_data = latest_cv["parsed_data"]
-
-    # ----- Determine Audience Type -----
+def determine_audience_type(parsed_data: dict) -> str:
     audience_type = None
 
-    # --- 1. Student detection ---
     education_list = parsed_data.get("Education", [])
     student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
 
@@ -302,7 +277,6 @@ async def get_audience_questions(
             audience_type = "Student"
             break
 
-    # --- 2. Work Experience checks ---
     work_exp_list = parsed_data.get("WorkExperience", [])
 
     has_current_job = any(
@@ -311,11 +285,9 @@ async def get_audience_questions(
         for w in work_exp_list
     )
 
-    # Prefer parsed YearsOfExperience if available
     if "YearsOfExperience" in parsed_data and isinstance(parsed_data["YearsOfExperience"], (int, float)):
         total_years = float(parsed_data["YearsOfExperience"])
     else:
-        # Fallback: calculate from job history
         total_years = 0
         for w in work_exp_list:
             try:
@@ -332,8 +304,7 @@ async def get_audience_questions(
             except Exception:
                 continue
 
-    # --- 3. Decide audience type ---
-    if not audience_type:  # Only if not student
+    if not audience_type:
         if not has_current_job and total_years < 0.5:
             audience_type = "Job Seeker"
         elif total_years <= 3:
@@ -341,7 +312,24 @@ async def get_audience_questions(
         else:
             audience_type = "Mid - Career Pivot"
 
-    # ----- Fetch matching questions -----
+    return audience_type
+
+
+@router.get("/job-questions")
+async def get_audience_questions(
+    db=Depends(get_database),
+    current_user=Depends(get_current_user)
+):
+    latest_cv = await db["uploads"].find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    audience_type = determine_audience_type(latest_cv["parsed_data"])
+
     questions_doc = await db["questions"].find_one({"audienceType": audience_type})
     if not questions_doc:
         raise HTTPException(status_code=404, detail=f"No questions found for audience type: {audience_type}")
@@ -350,4 +338,30 @@ async def get_audience_questions(
         "success": True,
         "audienceType": audience_type,
         "questions": questions_doc.get("questions", [])
+    }
+
+
+@router.get("/anchor-attributes-questions")
+async def get_anchor_attributes_questions(
+    db=Depends(get_database),
+    current_user=Depends(get_current_user)
+):
+    latest_cv = await db["uploads"].find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    audience_type = determine_audience_type(latest_cv["parsed_data"])
+
+    anchor_doc = await db["anchor_attributes"].find_one({"audienceType": audience_type})
+    if not anchor_doc:
+        raise HTTPException(status_code=404, detail=f"No anchor attributes found for audience type: {audience_type}")
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": anchor_doc.get("questions", [])
     }

@@ -1,0 +1,162 @@
+[
+  {
+    "audienceType": "Early Professional (2-3 years of experience)",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What kind of things light you up — things that pull you in without much effort?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+      }
+    ]
+  },
+  {
+    "audienceType": "Student",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What do you enjoy doing when you're not studying?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "How do you usually deal with new or tough situations?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Which of these sounds most like your natural strengths or personality?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside studies, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "Have you picked up any new tools, tech, or topics recently – or planning to?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+      }
+    ]
+  },
+  {
+    "audienceType": "Mid - Career Pivot",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What kind of things light you up — things that pull you in without much effort?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+      }
+    ]
+  },
+  {
+    "audienceType": "Job Seeker",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What kind of things light you up — things that pull you in without much effort?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+      }
+    ]
+  }
+]
