@@ -14,6 +14,7 @@ import asyncio
 import json
 from datetime import datetime
 from pymongo import DESCENDING
+from app.services.skill_suggestions import save_skill_suggestions
 from app.services.profile import (
     get_profile_summary_service,
     get_missing_field_questions_service,
@@ -93,29 +94,85 @@ async def extract_cv(
     db=Depends(get_database),
     current_user=Depends(get_current_user)
 ):
-    mime_type = file.content_type
+    import tempfile
+    from app.utils.cv_extractor import extract_cv_data_from_file, generate_missing_field_suggestions
+    from app.services.cv_comparison import get_cv_summary
+    from app.services.skill_suggestions import save_skill_suggestions
 
+    # Save uploaded file temporarily
     with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    data = extract_cv_data_from_file(tmp_path, mime_type)
+    # Step 1: Extract CV data
+    data = extract_cv_data_from_file(tmp_path, file.content_type)
+    if "error" in data:
+        return {"message": "CV extraction failed", "error": data["error"]}
 
-    save_result = await save_extracted_cv_data(
-        user_id=current_user["_id"],
+    # Step 2: Save CV record in DB
+    saved_cv = await save_extracted_cv_data(
+        user_id=current_user["id"],
         parsed_data=data,
         file_path=tmp_path,
         db=db
     )
+    cv_id_str = str(saved_cv.get("_id"))
 
+    # Step 3: Generate missing field / skill suggestions
+    softskills_suggestions = []
+    technical_skills_suggestions = []
+
+    # ✅ Call suggestions if soft/hard skills are missing
+    if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
+        try:
+            suggestions = await generate_missing_field_suggestions(data)
+
+            # 🔍 Print suggestions
+            print("\n=== Suggestions Returned by generate_missing_field_suggestions ===")
+            print(suggestions)
+            print("================================================================\n")
+
+        except Exception as e:
+            print(f"❌ Error in generate_missing_field_suggestions: {e}")
+            suggestions = {
+                "softskills_suggestions": [],
+                "technical_skills_suggestions": []
+            }
+
+        softskills_suggestions = suggestions.get("softskills_suggestions", [])
+        technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
+
+    # Step 4: Save skill suggestions in DB
+    inserted_id = await save_skill_suggestions(
+        user_id=current_user["id"],
+        cv_id=cv_id_str,
+        softskills=softskills_suggestions,
+        technical_skills=technical_skills_suggestions,
+        db=db
+    )
+
+    # Step 5: Generate CV summary
     summary = await get_cv_summary(data)
 
+    # 🔍 Print summary too
+    print("\n=== Summary Returned by get_cv_summary ===")
+    print(summary)
+    print("==========================================\n")
+
+    # Step 6: Return full response
     return {
+        "cv_id": cv_id_str,
         "parsed_data": data,
         "summary": summary,
-        **save_result,
+        "softskills_suggestions": softskills_suggestions,
+        "technical_skills_suggestions": technical_skills_suggestions,
+        "skills_id": inserted_id,
         "message": "CV data extracted and saved successfully"
     }
+
+
+
+
 
 
 @router.get("/profile/summary")

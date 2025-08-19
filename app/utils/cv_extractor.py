@@ -87,7 +87,7 @@ def extract_docx_text(filepath):
 
 def extract_cv_data_from_file(filepath: str, mime_type: str):
     prompt = """ 
-    You are an expert resume parser.
+You are an expert resume parser.
 
 Given a resume file, extract structured JSON with the following fields:
 
@@ -165,20 +165,28 @@ Given a resume file, extract structured JSON with the following fields:
 
 Instructions:
 
-- Categorize **Skills** as:
-  - "HardSkills": Technical or domain-specific abilities (e.g., Programming, Operating Systems, Cloud Computing)
-  - "SoftSkills": Personal or interpersonal qualities (e.g., Communication, Team Work, Adaptability)
+- Extract data **only if explicitly mentioned** in the CV text. 
+- Do NOT infer or guess missing values. 
+- Leave any field empty (`""` or `[]`) if it is not clearly present.
 
-- Extract a separate **Tools** field (not inside Skills):
-  - These are specific technologies, software, frameworks, or programming languages (e.g., C++, Java, C#, Photoshop, Excel, etc.)
-  - Include tools mentioned in Skills, WorkExperience, Projects, and Certifications.
+- Categorize **Skills** only if a "Skills" section or explicit mentions exist:
+  - "HardSkills": Technical or domain-specific abilities (e.g., Programming, Operating Systems, Cloud Computing).
+  - "SoftSkills": Personal or interpersonal qualities (e.g., Communication, Team Work, Adaptability).
+  - If no Skills section is present, both lists must remain empty.
 
-- "YearsOfExperience": Calculate total professional experience from the WorkExperience section based on the durations provided. If "Present" is used as an end date, assume the current date.
+- Extract a separate **Tools** field:
+  - These are only specific technologies, frameworks, or software (e.g., C++, Java, C#, Photoshop, Excel).
+  - Tools must be explicitly written in the CV (from Skills, WorkExperience, Projects, Certifications).
+  - If none are found, return an empty list.
 
-- If any section is missing in the resume, return an empty list or empty string.
+- "YearsOfExperience": Calculate from WorkExperience dates. 
+  - If "Present" is used, assume today’s date.
+  - If dates are unclear, return `0.0`.
 
-Return only valid JSON. Start your response with `{` and end with `}`. No markdown or explanations.
+- Never invent, summarize, or add generic placeholders.
+- Return only valid JSON. Start with `{` and end with `}`. No markdown, no commentary.
 """
+
 
     try:
         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -268,35 +276,112 @@ def predict_audience_type(parsed_data: Dict) -> str:
     return audience_type
 
 
+import json
+
+FIELD_MAPPING = {
+    "softskills": "softskills_suggestions",
+    "soft skills": "softskills_suggestions",
+    "softskills_suggestions": "softskills_suggestions",
+    "hardskills": "technical_skills_suggestions",
+    "hard skills": "technical_skills_suggestions",
+    "tools": "technical_skills_suggestions",
+    "technicalskills": "technical_skills_suggestions",
+    "technical_skills": "technical_skills_suggestions"
+}
+
+def normalize_key(key: str) -> str:
+    return key.strip().lower().replace("_", "").replace(" ", "")
+
+def clean_llm_json_response(response_text: str) -> str:
+    """Remove markdown fences and extract clean JSON substring."""
+    response_text = response_text.strip()
+    if response_text.startswith("```json"):
+        response_text = response_text[len("```json"):].strip()
+    if response_text.startswith("```"):
+        response_text = response_text[3:].strip()
+    if response_text.endswith("```"):
+        response_text = response_text[:-3].strip()
+
+    start_idx = response_text.find("{")
+    end_idx = response_text.rfind("}")
+    if start_idx != -1 and end_idx != -1:
+        response_text = response_text[start_idx:end_idx + 1]
+
+    return response_text
 
 
-async def generate_missing_field_suggestions(cv_context: dict, field_types: list[str]) -> dict[str, list[str]]:
-    """
-    Batch generate missing field suggestions (skills, certifications, etc.)
-    in one Gemini request to reduce latency.
-    """
+async def generate_missing_field_suggestions(cv_context: dict) -> dict:
+    suggestions = {
+        "softskills_suggestions": [],
+        "technical_skills_suggestions": []
+    }
+
+    missing_fields = []
+    generate_technical = False  # ✅ group HardSkills + Tools as technical
+
+    # Check Soft Skills
+    if not cv_context.get("Skills", {}).get("SoftSkills"):
+        missing_fields.append("SoftSkills")
+
+    # Check HardSkills OR Tools
+    if not cv_context.get("Skills", {}).get("HardSkills") or not cv_context.get("Tools"):
+        missing_fields.extend(["HardSkills", "Tools"])
+        generate_technical = True
+
+    if not missing_fields:
+        return suggestions
+
+    # Build context string
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
-
-    cv_type = cv_context.get("Summary", "") or cv_context.get("WorkExperience", [])
-    if isinstance(cv_type, list):
-        cv_type_text = " ".join(str(job.get("Role", "")) for job in cv_type)
-    else:
-        cv_type_text = str(cv_type)
-
     prompt = (
         "You are an AI helping complete missing CV fields.\n"
-        "For each field type provided, suggest a relevant and comprehensive comma-separated list "
-        "based on the candidate's CV context.\n\n"
         f"CV Context:\n{context_str}\n\n"
-        f"CV Type: {cv_type_text}\n\n"
-        "Respond ONLY in JSON with keys as field types and values as comma-separated strings."
+        f"Missing Fields: {missing_fields}\n"
+        "Respond ONLY in JSON with keys matching the missing fields. "
+        "Each value must be a JSON array of strings."
     )
 
     response = await model.generate_content_async(prompt)
 
-    try:
-        parsed = json.loads(response.text)
-    except Exception:
-        parsed = {ftype: [] for ftype in field_types}
+    # Debug prints
+    print("\n==== PROMPT SENT TO LLM ====")
+    print(prompt)
+    print("\n==== RAW RESPONSE FROM LLM ====")
+    print(response.text)
+    print("==============================\n")
 
-    return parsed
+    # Clean and parse response
+    cleaned = clean_llm_json_response(response.text)
+    try:
+        parsed = json.loads(cleaned)
+    except Exception as e:
+        print("⚠️ JSON parse error:", e)
+        parsed = {f: [] for f in missing_fields}
+
+    # Map parsed values
+    for key, value in parsed.items():
+        norm_key = normalize_key(key)
+        mapped_field = FIELD_MAPPING.get(norm_key)
+
+        if not mapped_field:
+            continue
+
+        # Ensure value is a list
+        if isinstance(value, str):
+            items = [s.strip() for s in value.split(",") if s.strip()]
+        elif isinstance(value, list):
+            items = [str(s).strip() for s in value if str(s).strip()]
+        else:
+            items = []
+
+        if mapped_field == "softskills_suggestions":
+            suggestions["softskills_suggestions"].extend(items)
+        if mapped_field == "technical_skills_suggestions" and generate_technical:
+            suggestions["technical_skills_suggestions"].extend(items)
+
+    # Deduplicate
+    suggestions["softskills_suggestions"] = list(set(suggestions["softskills_suggestions"]))
+    suggestions["technical_skills_suggestions"] = list(set(suggestions["technical_skills_suggestions"]))
+
+    print("✅ Final mapped suggestions:", suggestions)
+    return suggestions

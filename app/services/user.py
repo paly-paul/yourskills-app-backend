@@ -49,7 +49,8 @@ async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_
         "parsed_data": parsed_data,
         "uploaded_at": datetime.utcnow()
     }
-    await db.uploads.insert_one(upload_doc)
+    result = await db.uploads.insert_one(upload_doc)
+    upload_doc["_id"] = result.inserted_id  # <-- return the inserted ID
 
     profile_update = {
         "bio": parsed_data.get("Summary", ""),
@@ -65,7 +66,6 @@ async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_
     for skill_type in ["HardSkills", "SoftSkills"]:
         skill_list = parsed_data.get("Skills", {}).get(skill_type, [])
         for skill_name in skill_list:
-    
             skill_doc = await db.skills.find_one({"name": skill_name})
             if not skill_doc:
                 skill_doc = {
@@ -87,4 +87,5 @@ async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_
                     "skill_id": skill_id
                 })
 
-    return {"message": "CV data extracted and saved successfully"}
+    # Return the full inserted document
+    return upload_doc

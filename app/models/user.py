@@ -1,6 +1,6 @@
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, EmailStr, Field
 import uuid
 
@@ -69,3 +69,12 @@ class UploadModel(BaseModel):
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
+
+
+class SkillSuggestionModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")
+    user_id: str
+    cv_id: str
+    softskills_suggestions: List[str] = Field(default_factory=list)
+    technical_skills_suggestions: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
