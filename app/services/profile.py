@@ -4,6 +4,7 @@ from pymongo import DESCENDING
 from datetime import datetime
 from app.utils.cv_extractor import predict_audience_type
 from app.utils.cv_extractor import generate_missing_field_suggestions
+from app.services.cv_comparison import get_cv_summary
 import json
 
 
@@ -16,46 +17,52 @@ async def get_profile_summary_service(db, current_user):
         query,
         sort=[("uploaded_at", DESCENDING)]
     )
-
     if not latest_upload:
         raise HTTPException(status_code=404, detail="No CV uploaded yet")
 
-    parsed_data = latest_upload.get("parsed_data", {})
-    job_role = None
+    parsed_data = latest_upload.get("parsed_data", {}) or {}
 
-    work_experiences = parsed_data.get("WorkExperience", [])
-    if work_experiences:
-        def parse_duration(duration_str):
-            import re
-            from dateutil import parser as date_parser
-            try:
-                parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
-                if len(parts) != 2:
-                    return None
-                start_str, end_str = parts[0].strip(), parts[1].strip().lower()
-                start_date = date_parser.parse(start_str, fuzzy=True)
-                if "present" in end_str or "current" in end_str or "ongoing" in end_str:
-                    end_date = datetime.today()
-                else:
-                    end_date = date_parser.parse(end_str, fuzzy=True)
-                return start_date, end_date
-            except:
+    work_experiences = parsed_data.get("WorkExperience", []) or []
+    def parse_duration(duration_str: str):
+        import re
+        from dateutil import parser as date_parser
+        try:
+            parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
+            if len(parts) != 2:
                 return None
+            start_str, end_str = parts[0].strip(), parts[1].strip().lower()
+            start_date = date_parser.parse(start_str, fuzzy=True)
+            if any(x in end_str for x in ("present", "current", "ongoing")):
+                end_date = datetime.today()
+            else:
+                end_date = date_parser.parse(end_str, fuzzy=True)
+            return start_date, end_date
+        except Exception:
+            return None
 
-        latest_end = datetime.min
-        for job in work_experiences:
-            parsed = parse_duration(job.get("Duration", ""))
-            if parsed:
-                _, end = parsed
-                if end > latest_end:
-                    latest_end = end
-                    job_role = job.get("Role")
+    job_role = None
+    latest_end = datetime.min
+    for job in work_experiences:
+        parsed = parse_duration(job.get("Duration", ""))
+        if parsed:
+            _, end = parsed
+            if end > latest_end:
+                latest_end = end
+                job_role = job.get("Role")
+
+    summary = await get_cv_summary(parsed_data)
+    known_fields = len(summary.get("known", []))
+    unknown_fields = len(summary.get("unknown", []))
+    total_fields = known_fields + unknown_fields
+
+    known_percentage = round((known_fields / total_fields) * 100, 2) if total_fields else 0.0
 
     return {
         "candidate": {
             "name": parsed_data.get("Name"),
             "job_role": job_role,
-            "audience_type": predict_audience_type(parsed_data)
+            "audience_type": predict_audience_type(parsed_data),
+            "known_percentage": known_percentage
         }
     }
 
@@ -238,7 +245,6 @@ async def get_anchor_questions(parsed_data: dict) -> str:
     """Classify audience type from parsed CV data."""
     audience_type = None
 
-    # Case A: Student
     education_list = parsed_data.get("Education", [])
     student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
 
@@ -247,7 +253,7 @@ async def get_anchor_questions(parsed_data: dict) -> str:
         if any(keyword in combined_fields for keyword in student_keywords):
             return "Student"
 
-    # Case B: Work Experience
+ 
     work_exp_list = parsed_data.get("WorkExperience", [])
     has_current_job = any(
         str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"]
@@ -255,7 +261,6 @@ async def get_anchor_questions(parsed_data: dict) -> str:
         for w in work_exp_list
     )
 
-    # Years of experience
     total_years = float(parsed_data.get("YearsOfExperience", 0) or 0)
 
     for w in work_exp_list:
@@ -296,10 +301,9 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
 
     parsed_data = latest_cv["parsed_data"]
 
-    # Classify audience type
+
     audience_type = await get_anchor_questions(parsed_data)
 
-    # Fetch questions
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
