@@ -5,6 +5,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# db.createUser({
+#   user: "snapshot_user",
+#   pwd: "change-this-app-pass",
+#   roles: [{ role: "readWrite", db: "snapshot" }]
+# });
+# DB_URL=mongodb://snapshot_user:admin@localhost:27017/snapshot?authSource=snapshot
+# MONGO_DB=snapshot
+
 MONGO_URL = os.getenv("DB_URL")
 MONGO_DB_NAME = os.getenv("MONGO_DB")
 

@@ -3,12 +3,28 @@ from fastapi import FastAPI
 from app.api.router import router
 from app.db.database import connect_to_mongo, close_mongo_connection
 from fastapi.openapi.utils import get_openapi
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Skill Snapshot API",
     version="v1"
 )
 
+origins = [
+    "http://localhost:3000",           
+    "http://127.0.0.1:3000",           
+    "http://35.232.82.213",            
+    "https://yourskills.ai",           
+    "https://www.yourskills.ai",       
+    "https://dev.yourskills.ai"        
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.on_event("startup")
 async def startup_db_client():
     await connect_to_mongo()

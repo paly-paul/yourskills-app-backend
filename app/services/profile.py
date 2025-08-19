@@ -1,0 +1,320 @@
+from fastapi import HTTPException
+from bson import ObjectId
+from pymongo import DESCENDING
+from datetime import datetime
+from app.utils.cv_extractor import predict_audience_type
+from app.utils.cv_extractor import generate_missing_field_suggestions
+import json
+
+
+async def get_profile_summary_service(db, current_user):
+    uploads_collection = db["uploads"]
+    user_id = str(current_user.get("_id"))
+
+    query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
+    latest_upload = await uploads_collection.find_one(
+        query,
+        sort=[("uploaded_at", DESCENDING)]
+    )
+
+    if not latest_upload:
+        raise HTTPException(status_code=404, detail="No CV uploaded yet")
+
+    parsed_data = latest_upload.get("parsed_data", {})
+    job_role = None
+
+    work_experiences = parsed_data.get("WorkExperience", [])
+    if work_experiences:
+        def parse_duration(duration_str):
+            import re
+            from dateutil import parser as date_parser
+            try:
+                parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
+                if len(parts) != 2:
+                    return None
+                start_str, end_str = parts[0].strip(), parts[1].strip().lower()
+                start_date = date_parser.parse(start_str, fuzzy=True)
+                if "present" in end_str or "current" in end_str or "ongoing" in end_str:
+                    end_date = datetime.today()
+                else:
+                    end_date = date_parser.parse(end_str, fuzzy=True)
+                return start_date, end_date
+            except:
+                return None
+
+        latest_end = datetime.min
+        for job in work_experiences:
+            parsed = parse_duration(job.get("Duration", ""))
+            if parsed:
+                _, end = parsed
+                if end > latest_end:
+                    latest_end = end
+                    job_role = job.get("Role")
+
+    return {
+        "candidate": {
+            "name": parsed_data.get("Name"),
+            "job_role": job_role,
+            "audience_type": predict_audience_type(parsed_data)
+        }
+    }
+
+
+async def get_missing_field_questions_service(section: str, db, current_user):
+    uploads_collection = db["uploads"]
+    questions_collection = db["questions"]
+
+    user_id = str(current_user.get("_id"))
+
+    param_to_parsed_key = {
+        "Education": "Education",
+        "Experience": "WorkExperience",
+        "Technical Skills": "Skills.HardSkills",
+        "Soft Skills": "Skills.SoftSkills",
+        "Certifications": "Certifications",
+        "Projects": "Projects",
+        "Languages Known": "Languages",
+        "Career Objective": "Summary",
+        "Awards": "Awards",
+        "Volunteer Experience": "VolunteerExperience",
+        "Hobbies": "Hobbies",
+        "Salary Grades": None,
+    }
+
+    latest_cv = await uploads_collection.find_one(
+        {"user_id": {"$in": [user_id, ObjectId(user_id)]}},
+        sort=[("_id", -1)]
+    )
+    parsed_data = latest_cv.get("parsed_data", {}) if latest_cv else {}
+
+    questions_doc = await questions_collection.find_one({}) or {}
+    questions_docs = questions_doc.get(section, [])
+
+    all_parameters = [
+        q.get("parameter")
+        for q in questions_docs
+        if q.get("parameter") and q["parameter"] != "Tools"
+    ]
+
+
+    missing_fields = []
+    hard_skills = parsed_data.get("Skills", {}).get("HardSkills", [])
+    tools = parsed_data.get("Tools", [])
+
+    if not hard_skills or not tools:
+        missing_fields.append("Technical Skills")
+
+    for param in all_parameters:
+        if param == "Technical Skills":
+            continue
+
+        parsed_key_path = param_to_parsed_key.get(param)
+        if not parsed_key_path:
+            missing_fields.append(param)
+            continue
+        keys = parsed_key_path.split(".")
+        value = parsed_data
+        for k in keys:
+            if isinstance(value, dict):
+                value = value.get(k)
+            else:
+                value = None
+            if value is None:
+                break
+
+        if not value or (isinstance(value, list) and len(value) == 0):
+            missing_fields.append(param)
+        elif isinstance(value, dict):
+            if all(not v or (isinstance(v, list) and len(v) == 0) for v in value.values()):
+                missing_fields.append(param)
+
+    llm_fields_needed = [
+        q.get("parameter")
+        for q in questions_docs
+        if q.get("parameter") in ("Technical Skills", "Soft Skills", "Certifications")
+        and q.get("parameter") in missing_fields
+    ]
+
+    suggestions_data = {}
+    if llm_fields_needed:
+        suggestions_data = await generate_missing_field_suggestions(parsed_data, llm_fields_needed)
+
+    missing_questions = []
+    for q in questions_docs:
+        param = q.get("parameter")
+        if param in missing_fields:
+            q_entry = {**q}
+            if "_id" in q_entry:
+                q_entry["_id"] = str(q_entry["_id"]) 
+            if param in suggestions_data:
+                q_entry["options"] = suggestions_data[param]
+            missing_questions.append(q_entry)
+
+    return {
+        "success": True,
+        "section": section,
+        "count": len(missing_questions),
+        "questions": missing_questions,
+        "missing_fields": missing_fields,
+    }
+
+async def get_audience_questions_service(db, current_user):
+    uploads_collection = db["uploads"]
+    questions_collection = db["questions"]
+
+    latest_cv = await uploads_collection.find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    parsed_data = latest_cv["parsed_data"]
+
+    audience_type = None
+
+    education_list = parsed_data.get("Education", [])
+    student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
+
+    for ed in education_list:
+        combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
+        if any(keyword in combined_fields for keyword in student_keywords):
+            audience_type = "Student"
+            break
+
+    work_exp_list = parsed_data.get("WorkExperience", [])
+    has_current_job = any(
+        str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"]
+        or str(w.get("endDate", "")).strip().lower() in ["present", "current", "ongoing", ""]
+        for w in work_exp_list
+    )
+
+    if "YearsOfExperience" in parsed_data and isinstance(parsed_data["YearsOfExperience"], (int, float)):
+        total_years = float(parsed_data["YearsOfExperience"])
+    else:
+        total_years = 0
+
+    for w in work_exp_list:
+        try:
+            start_raw = w.get("startDate")
+            end_raw = w.get("endDate")
+
+            start = datetime.strptime(str(start_raw), "%Y-%m-%d")
+            if not end_raw or str(end_raw).strip().lower() in ["present", "current", "ongoing"]:
+                end = datetime.today()
+            else:
+                end = datetime.strptime(str(end_raw), "%Y-%m-%d")
+
+            total_years += (end - start).days / 365
+        except Exception:
+            continue
+
+    if not audience_type:
+        if not has_current_job and total_years < 0.5:
+            audience_type = "Job Seeker"
+        elif total_years <= 3:
+            audience_type = "Early Professional (2-3 years of experience)"
+        else:
+            audience_type = "Mid - Career Pivot"
+
+    questions_doc = await questions_collection.find_one({})
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail="No questions collection found")
+
+    job_attributes = questions_doc.get("Job attributes", [])
+    matching_entry = next((item for item in job_attributes if item.get("audienceType") == audience_type), None)
+
+    if not matching_entry:
+        raise HTTPException(status_code=404, detail=f"No questions found for audience type: {audience_type}")
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": matching_entry.get("questions", []),
+    }
+
+
+async def get_anchor_questions(parsed_data: dict) -> str:
+    """Classify audience type from parsed CV data."""
+    audience_type = None
+
+    # Case A: Student
+    education_list = parsed_data.get("Education", [])
+    student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
+
+    for ed in education_list:
+        combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
+        if any(keyword in combined_fields for keyword in student_keywords):
+            return "Student"
+
+    # Case B: Work Experience
+    work_exp_list = parsed_data.get("WorkExperience", [])
+    has_current_job = any(
+        str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"]
+        or str(w.get("endDate", "")).strip().lower() in ["present", "current", "ongoing", ""]
+        for w in work_exp_list
+    )
+
+    # Years of experience
+    total_years = float(parsed_data.get("YearsOfExperience", 0) or 0)
+
+    for w in work_exp_list:
+        try:
+            start_raw = w.get("startDate")
+            end_raw = w.get("endDate")
+
+            start = datetime.strptime(str(start_raw), "%Y-%m-%d")
+            if not end_raw or str(end_raw).strip().lower() in ["present", "current", "ongoing"]:
+                end = datetime.today()
+            else:
+                end = datetime.strptime(str(end_raw), "%Y-%m-%d")
+
+            total_years += (end - start).days / 365
+        except Exception:
+            continue
+
+    if not has_current_job and total_years < 0.5:
+        return "Job Seeker"
+    elif total_years <= 3:
+        return "Early Professional (2-3 years of experience)"
+    else:
+        return "Mid - Career Pivot"
+
+
+async def get_questions_by_audience(db, current_user, attribute_type: str):
+    """Fetch questions based on audience type and attribute category (Job/Anchor)."""
+    uploads_collection = db["uploads"]
+    questions_collection = db["questions"]
+
+    # Fetch latest CV
+    latest_cv = await uploads_collection.find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    parsed_data = latest_cv["parsed_data"]
+
+    # Classify audience type
+    audience_type = await get_anchor_questions(parsed_data)
+
+    # Fetch questions
+    questions_doc = await questions_collection.find_one({})
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail="No questions collection found")
+
+    attributes = questions_doc.get(attribute_type, [])
+    matching_entry = next((item for item in attributes if item.get("audienceType") == audience_type), None)
+
+    if not matching_entry:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
+        )
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": matching_entry.get("questions", []),
+    }

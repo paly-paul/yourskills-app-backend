@@ -7,10 +7,12 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from docx import Document
 import re
+from typing import Dict
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-1.5-flash")
+
 
 
 from datetime import datetime
@@ -215,3 +217,86 @@ Return only valid JSON. Start your response with `{` and end with `}`. No markdo
     except Exception as e:
         print("CV Extraction Error:", str(e))
         return {"error": "Failed to parse CV data"}
+
+
+def predict_audience_type(parsed_data: Dict) -> str:
+    audience_type = None
+    student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
+
+    # Education
+    for ed in parsed_data.get("Education", []):
+        combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
+        if any(keyword in combined_fields for keyword in student_keywords):
+            return "Student"
+
+    # Work Experience
+    work_exp_list = parsed_data.get("WorkExperience", [])
+    has_current_job = any(
+        str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"] or
+        str(w.get("endDate", "")).strip().lower() in ["present", "current", "ongoing", ""]
+        for w in work_exp_list
+    )
+
+    # Years of Experience
+    if "YearsOfExperience" in parsed_data and isinstance(parsed_data["YearsOfExperience"], (int, float)):
+        total_years = float(parsed_data["YearsOfExperience"])
+    else:
+        total_years = 0
+        for w in work_exp_list:
+            try:
+                start_raw = w.get("startDate")
+                end_raw = w.get("endDate")
+
+                start = datetime.strptime(str(start_raw), "%Y-%m-%d")
+                if not end_raw or str(end_raw).strip().lower() in ["present", "current", "ongoing"]:
+                    end = datetime.today()
+                else:
+                    end = datetime.strptime(str(end_raw), "%Y-%m-%d")
+
+                total_years += (end - start).days / 365
+            except Exception:
+                continue
+
+    if not audience_type:
+        if not has_current_job and total_years < 0.5:
+            return "Job Seeker"
+        elif total_years <= 3:
+            return "Early Professional (2-3 years of experience)"
+        else:
+            return "Mid - Career Pivot"
+
+    return audience_type
+
+
+
+
+async def generate_missing_field_suggestions(cv_context: dict, field_types: list[str]) -> dict[str, list[str]]:
+    """
+    Batch generate missing field suggestions (skills, certifications, etc.)
+    in one Gemini request to reduce latency.
+    """
+    context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
+
+    cv_type = cv_context.get("Summary", "") or cv_context.get("WorkExperience", [])
+    if isinstance(cv_type, list):
+        cv_type_text = " ".join(str(job.get("Role", "")) for job in cv_type)
+    else:
+        cv_type_text = str(cv_type)
+
+    prompt = (
+        "You are an AI helping complete missing CV fields.\n"
+        "For each field type provided, suggest a relevant and comprehensive comma-separated list "
+        "based on the candidate's CV context.\n\n"
+        f"CV Context:\n{context_str}\n\n"
+        f"CV Type: {cv_type_text}\n\n"
+        "Respond ONLY in JSON with keys as field types and values as comma-separated strings."
+    )
+
+    response = await model.generate_content_async(prompt)
+
+    try:
+        parsed = json.loads(response.text)
+    except Exception:
+        parsed = {ftype: [] for ftype in field_types}
+
+    return parsed

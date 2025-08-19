@@ -1,0 +1,533 @@
+{
+  "Cv Missing": [
+    {
+      "parameter": "Education",
+      "questionText": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
+      "iconFileName": "education",
+      "options": [
+        {
+          "label": "High School",
+          "dropdownOptions": [
+            "Science Stream",
+            "Commerce Stream",
+            "Arts/Humanities Stream",
+            "Vocational/Skill-Based Streams",
+            "Other (please specify)"
+          ]
+        },
+        {
+          "label": "Diploma/Certification",
+          "dropdownOptions": [
+            "Diploma in Mechanical Engineering",
+            "Diploma in Civil Engineering",
+            "Diploma in Computer Engineering",
+            "Diploma in Automobile Engineering",
+            "Diploma in Web Design",
+            "Diploma in Graphic Design",
+            "Diploma in Animation & VFX",
+            "Diploma in Software Engineering",
+            "Diploma in Digital Marketing",
+            "Diploma in Nursing",
+            "Diploma in Pharmacy",
+            "Diploma in Medical Lab Technology",
+            "Diploma in Radiology",
+            "Diploma in Hotel Management",
+            "Diploma in Event Management",
+            "Diploma in Retail Management",
+            "Diploma in Travel & Tourism",
+            "Diploma in Fashion Design",
+            "Diploma in Culinary Arts",
+            "Diploma in Photography",
+            "Diploma in Early Childhood Education",
+            "Diploma in Interior Design",
+            "Diploma in Electrical Engineering",
+            "Other (please specify)"
+          ]
+        },
+        {
+          "label": "Bachelor's",
+          "dropdownOptions": [
+            "B.Sc. (Physics, Chemistry, Biology, Microbiology, Statistics)",
+            "B.Sc. Computer Science / IT / Data Science",
+            "B.Tech / B.E. (Engineering Specializations)",
+            "BCA (Computer Applications)",
+            "B.Sc. Nursing / Biotechnology",
+            "B.Com (General, Accounting & Finance, Banking)",
+            "BBA (Business Administration)",
+            "B.A. (Arts & Humanities Specializations)",
+            "BFA (Fine Arts, Applied Arts)",
+            "LLB (Law)",
+            "MBBS / BDS / BAMS / BHMS / BPT",
+            "B.Ed (Education)",
+            "B.Des (Design Specializations)",
+            "B.Arch (Architecture)",
+            "B.Pharm (Pharmacy)",
+            "BHM (Hotel Management)",
+            "B.Voc (Vocational Courses)",
+            "Other (please specify)"
+          ]
+        },
+        {
+          "label": "Master's",
+          "dropdownOptions": [
+            "M.Sc. (Science Specializations)",
+            "M.Tech / M.E. (Engineering Specializations)",
+            "MCA (Computer Applications)",
+            "MBA (General, Finance, Marketing, HR, IT, Operations, Analytics)",
+            "M.Com (Finance, Taxation, Banking)",
+            "M.A. (Humanities Specializations)",
+            "LLM (Master of Laws)",
+            "MPH (Public Health)",
+            "MHA (Hospital Administration)",
+            "M.Ed (Education)",
+            "M.Des (Design Specializations)",
+            "M.Arch (Architecture)",
+            "M.Pharm (Pharmacy)",
+            "MFA (Fine Arts)",
+            "M.Phil (Research)",
+            "MSW (Social Work)",
+            "Other (please specify)"
+          ]
+        },
+        {
+          "label": "Doctorate/PhD",
+          "dropdownOptions": [
+            "PhD in Physics / Chemistry / Biology / Mathematics / Biotechnology",
+            "PhD in Computer Science / AI / Robotics / Data Science",
+            "PhD in Engineering Specializations",
+            "PhD in Economics / Commerce",
+            "PhD in Management / DBA",
+            "PhD in Psychology / Sociology / Anthropology / Political Science / Philosophy",
+            "PhD in English / History / Linguistics / Cultural Studies",
+            "PhD in Fine Arts / Performing Arts",
+            "EdD (Doctor of Education)",
+            "JSD / SJD / LLD (Law Doctorates)",
+            "PhD in Public Health / Public Administration",
+            "PhD in Nursing",
+            "PhD in Pharmacy / Pharmacology",
+            "PhD in Environmental Policy / Development Studies",
+            "Other (please specify)"
+          ]
+        }
+      ]
+    },
+    {
+      "parameter": "Experience",
+      "questionText": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
+      "iconFileName": "experience"
+    },
+    {
+      "parameter": "Technical Skills",
+      "questionText": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
+      "iconFileName": "technical_skills"
+    },
+    {
+      "parameter": "Soft Skills",
+      "questionText": "Which soft skills come naturally to you — like how you communicate, solve problems, or support your team?",
+      "iconFileName": "soft_skills"
+    },
+    {
+      "parameter": "Certifications",
+      "questionText": "Have you done any certifications, courses, or attended workshops recently?",
+      "iconFileName": "certifications"
+    },
+    {
+      "parameter": "Salary Grades",
+      "questionText": "If you’re comfortable sharing, what’s your current or expected salary range? Totally okay to skip if you’d rather not say!",
+      "iconFileName": "salary",
+      "options": [
+        "< ₹5L / <$10K",
+        "₹5L – ₹10L",
+        "₹10L – ₹20L",
+        "₹20L – ₹35L",
+        "₹35L+ / $70K+",
+        "Prefer not to say"
+      ]
+    },
+    {
+      "parameter": "Projects",
+      "questionText": "Have you worked on any cool projects (college, work, or side projects) that you’d love to share? Big or small – all count!",
+      "iconFileName": "projects"
+    },
+    {
+      "parameter": "Languages Known",
+      "questionText": "What languages can you speak, read, or write? Let me know your level — like fluent, basic, or somewhere in between.",
+      "iconFileName": "languages",
+      "options": [
+        "English",
+        "Hindi",
+        "Bengali",
+        "Tamil",
+        "Telugu",
+        "Marathi",
+        "Gujarati",
+        "Punjabi",
+        "Malayalam",
+        "Kannada",
+        "Urdu",
+        "Mandarin Chinese",
+        "Japanese",
+        "Korean",
+        "Arabic",
+        "French",
+        "German",
+        "Italian",
+        "Portuguese",
+        "Spanish",
+        "Russian",
+        "Swahili"
+      ]
+    },
+    {
+      "parameter": "Career Objective",
+      "questionText": "If you had to describe yourself in your current career — like what you do, what drives you, and what kind of work excites you — how would you put it in a few lines?",
+      "iconFileName": "career_objective"
+    }
+  ],
+
+  "Job attributes": [
+    {
+      "audienceType": "Early Professional (2-3 years of experience)",
+      "questions": [
+        {
+          "parameter": "Core Tasks + Supplementary Tasks",
+          "question": "What kind of stuff do you usually end up doing at work — even the things that weren’t officially part of your job?",
+          "iconfilename": "core_tasks.png"
+        },
+        {
+          "parameter": "Emerging Tasks",
+          "question": "Lately, have you picked up any new tasks or started doing things that weren’t part of your original role?",
+          "iconfilename": "emerging_tasks.png"
+        },
+        {
+          "parameter": "Hot Technologies",
+          "question": "What tools or tech do you find yourself using the most at work these days?",
+          "iconfilename": "hot_technologies.png"
+        },
+        {
+          "parameter": "Knowledge + Skills",
+          "question": "What skills or knowledge do you lean on most to get your work done?",
+          "iconfilename": "knowledge_skills.png"
+        },
+        {
+          "parameter": "Abilities + Functional Skills",
+          "question": "What strengths just come naturally to you when you're working?",
+          "iconfilename": "abilities_skills.png"
+        },
+        {
+          "parameter": "Work Styles + Work Activities",
+          "question": "What kind of work setup or vibe helps you do your best?",
+          "iconfilename": "work_styles.png"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "When you think about growing in your career, what really matters most to you?",
+          "iconfilename": "work_values.png"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "If you could explore or grow into a new area at work, what kind of stuff would you be excited to try?",
+          "iconfilename": "career_interests.png"
+        }
+      ]
+    },
+    {
+      "audienceType": "Student",
+      "questions": [
+        {
+          "parameter": "Core Tasks + Supplementary Tasks",
+          "question": "What kind of tasks do you naturally enjoy or end up doing, even if it's not assigned?",
+          "iconfilename": "core_tasks.png"
+        },
+        {
+          "parameter": "Emerging Tasks",
+          "question": "Have you taken on any new things recently that weren’t part of your course or role?",
+          "iconfilename": "emerging_tasks.png"
+        },
+        {
+          "parameter": "Hot Technologies",
+          "question": "Which latest tools or technologies have you used or are curious to try?",
+          "iconfilename": "hot_technologies.png"
+        },
+        {
+          "parameter": "Knowledge + Skills",
+          "question": "What subjects or skills do you feel most confident or interested in?",
+          "iconfilename": "knowledge_skills.png"
+        },
+        {
+          "parameter": "Abilities + Functional Skills",
+          "question": "Which of these things do you feel you’re naturally good at?",
+          "iconfilename": "abilities_skills.png"
+        },
+        {
+          "parameter": "Work Styles + Work Activities",
+          "question": "What kind of work vibe suits you best?",
+          "iconfilename": "work_styles.png"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "What matters the most to you when choosing a job or field?",
+          "iconfilename": "work_values.png"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "Which roles or fields have caught your attention recently – even just out of curiosity?",
+          "iconfilename": "career_interests.png"
+        }
+      ]
+    },
+    {
+      "audienceType": "Mid - Career Pivot",
+      "questions": [
+        {
+          "parameter": "Core Tasks + Supplementary Tasks",
+          "question": "What do you usually spend your work time doing — your regular and side responsibilities?",
+          "iconfilename": "core_tasks.png"
+        },
+        {
+          "parameter": "Emerging Tasks",
+          "question": "Have you picked up any new or unexpected responsibilities lately?",
+          "iconfilename": "emerging_tasks.png"
+        },
+        {
+          "parameter": "Hot Technologies",
+          "question": "Which tools or technologies do you find yourself using often?",
+          "iconfilename": "hot_technologies.png"
+        },
+        {
+          "parameter": "Knowledge + Skills",
+          "question": "What areas of knowledge or skill do you lean on most in your job?",
+          "iconfilename": "knowledge_skills.png"
+        },
+        {
+          "parameter": "Abilities + Functional Skills",
+          "question": "What kind of strengths come naturally to you at work?",
+          "iconfilename": "abilities_skills.png"
+        },
+        {
+          "parameter": "Work Styles + Work Activities",
+          "question": "What kind of work style or setup helps you do your best work?",
+          "iconfilename": "work_styles.png"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "What matters most to you in your next career move?",
+          "iconfilename": "work_values.png"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "If you could explore a new role, what direction would excite you most?",
+          "iconfilename": "career_interests.png"
+        }
+      ]
+    },
+    {
+      "audienceType": "Job Seeker",
+      "questions": [
+        {
+          "parameter": "Core Tasks + Supplementary Tasks",
+          "question": "What kind of stuff do you mostly do (or used to do) at work?",
+          "iconfilename": "core_tasks.png"
+        },
+        {
+          "parameter": "Emerging Tasks",
+          "question": "Have you started doing any new tasks that weren’t part of your role earlier?",
+          "iconfilename": "emerging_tasks.png"
+        },
+        {
+          "parameter": "Hot Technologies",
+          "question": "Which tools or tech have you worked with recently (or are comfortable learning)?",
+          "iconfilename": "hot_technologies.png"
+        },
+        {
+          "parameter": "Knowledge + Skills",
+          "question": "What areas do you feel strong in – the stuff you’ve got a good grip on?",
+          "iconfilename": "knowledge_skills.png"
+        },
+        {
+          "parameter": "Abilities + Functional Skills",
+          "question": "What strengths or talents come naturally to you?",
+          "iconfilename": "abilities_skills.png"
+        },
+        {
+          "parameter": "Work Styles + Work Activities",
+          "question": "What kind of work style or day-to-day vibe suits you best?",
+          "iconfilename": "work_styles.png"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "What matters most to you in a job right now?",
+          "iconfilename": "work_values.png"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "If you could try a new role or career direction, what would excite you the most?",
+          "iconfilename": "career_interests.png"
+        }
+      ]
+    }
+  ],
+
+  "Anchor attributes": [
+    {
+    "audienceType": "Early Professional (2-3 years of experience)",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What kind of things light you up — things that pull you in without much effort?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+      }
+    ]
+  },
+  {
+    "audienceType": "Student",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What do you enjoy doing when you're not studying?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "How do you usually deal with new or tough situations?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Which of these sounds most like your natural strengths or personality?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside studies, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "Have you picked up any new tools, tech, or topics recently – or planning to?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+      }
+    ]
+  },
+  {
+    "audienceType": "Mid - Career Pivot",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What kind of things light you up — things that pull you in without much effort?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+      }
+    ]
+  },
+  {
+    "audienceType": "Job Seeker",
+    "questions": [
+      {
+        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "question": "What kind of things light you up — things that pull you in without much effort?",
+        "iconfilename": "interests.png"
+      },
+      {
+        "parameter": "Achievements",
+        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+        "iconfilename": "trophy.png"
+      },
+      {
+        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+        "iconfilename": "behavior.png"
+      },
+      {
+        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+        "iconfilename": "strengths.png"
+      },
+      {
+        "parameter": "Social Causes + Volunteering + Cultural Exposure",
+        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+        "iconfilename": "community.png"
+      },
+      {
+        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+        "iconfilename": "learning.png"
+      },
+      {
+        "parameter": "Interests - RIASEC",
+        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+        "iconfilename": "riasec.png"
+     }
+      ]
+    }
+  ]
+}
