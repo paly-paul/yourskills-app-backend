@@ -102,7 +102,7 @@ Given a resume file, extract structured JSON with the following fields:
     "HardSkills": [],
     "SoftSkills": []
   },
-  "Tools": [],
+  
   "WorkExperience": [
     {
       "Company": "",
@@ -165,26 +165,30 @@ Given a resume file, extract structured JSON with the following fields:
 
 Instructions:
 
-- Extract data **only if explicitly mentioned** in the CV text. 
-- Do NOT infer or guess missing values. 
-- Leave any field empty (`""` or `[]`) if it is not clearly present.
+1. Extract data **only if explicitly mentioned** in the CV text.  
+2. Do NOT infer, guess, or summarize missing values. Leave any field empty (`""` or `[]`) if it is not clearly present.  
 
-- Categorize **Skills** only if a "Skills" section or explicit mentions exist:
-  - "HardSkills": Technical or domain-specific abilities (e.g., Programming, Operating Systems, Cloud Computing).
-  - "SoftSkills": Personal or interpersonal qualities (e.g., Communication, Team Work, Adaptability).
-  - If no Skills section is present, both lists must remain empty.
+3. For the **Skills** and **Tools** fields:
+   - Extract **HardSkills, SoftSkills, and Tools** if explicitly mentioned **anywhere in the CV except the WorkExperience section**, including Summary, Projects, or other sections.
+   - Extract skills listed as bullet points, comma-separated items, or inline lists.
+   - Categorize each skill as follows:
+     - "HardSkills": abstract abilities or knowledge areas, not specific software or platforms. Examples: Programming, Data Analysis, Cloud Computing, Machine Learning.
+     - "SoftSkills": personal or interpersonal qualities. Examples: Communication, Leadership, Team Work, Adaptability.
+     - "Tools": specific software, platforms, frameworks, programming languages, or technologies. Examples: Python, Excel, AWS, Salesforce, Tableau.
+   - Do NOT move a skill to Tools if it is described as a capability or knowledge area rather than a product, software, or platform.
+   - Include a skill in only one category. Do not infer categories.
+   - If no explicit skills or tools are present, leave all lists empty.
 
-- Extract a separate **Tools** field:
-  - These are only specific technologies, frameworks, or software (e.g., C++, Java, C#, Photoshop, Excel).
-  - Tools must be explicitly written in the CV (from Skills, WorkExperience, Projects, Certifications).
-  - If none are found, return an empty list.
+4. For **YearsOfExperience**, calculate based on WorkExperience dates only.  
+   - Treat "Present" as today's date.  
+   - If dates are unclear, return `0.0`.  
 
-- "YearsOfExperience": Calculate from WorkExperience dates. 
-  - If "Present" is used, assume today’s date.
-  - If dates are unclear, return `0.0`.
+5. Never summarize or analyze the CV beyond what is explicitly written.  
+6. Return only valid JSON. Start with `{` and end with `}`. No markdown, no commentary.
 
-- Never invent, summarize, or add generic placeholders.
-- Return only valid JSON. Start with `{` and end with `}`. No markdown, no commentary.
+
+
+
 """
 
 
@@ -231,13 +235,11 @@ def predict_audience_type(parsed_data: Dict) -> str:
     audience_type = None
     student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
 
-    # Education
     for ed in parsed_data.get("Education", []):
         combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
         if any(keyword in combined_fields for keyword in student_keywords):
             return "Student"
 
-    # Work Experience
     work_exp_list = parsed_data.get("WorkExperience", [])
     has_current_job = any(
         str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"] or
@@ -245,7 +247,6 @@ def predict_audience_type(parsed_data: Dict) -> str:
         for w in work_exp_list
     )
 
-    # Years of Experience
     if "YearsOfExperience" in parsed_data and isinstance(parsed_data["YearsOfExperience"], (int, float)):
         total_years = float(parsed_data["YearsOfExperience"])
     else:
@@ -317,13 +318,11 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     }
 
     missing_fields = []
-    generate_technical = False  # ✅ group HardSkills + Tools as technical
+    generate_technical = False 
 
-    # Check Soft Skills
     if not cv_context.get("Skills", {}).get("SoftSkills"):
         missing_fields.append("SoftSkills")
 
-    # Check HardSkills OR Tools
     if not cv_context.get("Skills", {}).get("HardSkills") or not cv_context.get("Tools"):
         missing_fields.extend(["HardSkills", "Tools"])
         generate_technical = True
@@ -331,7 +330,6 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     if not missing_fields:
         return suggestions
 
-    # Build context string
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
     prompt = (
         "You are an AI helping complete missing CV fields.\n"
@@ -343,22 +341,13 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
 
     response = await model.generate_content_async(prompt)
 
-    # Debug prints
-    print("\n==== PROMPT SENT TO LLM ====")
-    print(prompt)
-    print("\n==== RAW RESPONSE FROM LLM ====")
-    print(response.text)
-    print("==============================\n")
-
-    # Clean and parse response
+    
     cleaned = clean_llm_json_response(response.text)
     try:
         parsed = json.loads(cleaned)
     except Exception as e:
-        print("⚠️ JSON parse error:", e)
         parsed = {f: [] for f in missing_fields}
 
-    # Map parsed values
     for key, value in parsed.items():
         norm_key = normalize_key(key)
         mapped_field = FIELD_MAPPING.get(norm_key)
@@ -366,7 +355,6 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         if not mapped_field:
             continue
 
-        # Ensure value is a list
         if isinstance(value, str):
             items = [s.strip() for s in value.split(",") if s.strip()]
         elif isinstance(value, list):
@@ -379,9 +367,8 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         if mapped_field == "technical_skills_suggestions" and generate_technical:
             suggestions["technical_skills_suggestions"].extend(items)
 
-    # Deduplicate
     suggestions["softskills_suggestions"] = list(set(suggestions["softskills_suggestions"]))
     suggestions["technical_skills_suggestions"] = list(set(suggestions["technical_skills_suggestions"]))
 
-    print("✅ Final mapped suggestions:", suggestions)
+
     return suggestions

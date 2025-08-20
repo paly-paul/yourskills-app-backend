@@ -99,17 +99,14 @@ async def extract_cv(
     from app.services.cv_comparison import get_cv_summary
     from app.services.skill_suggestions import save_skill_suggestions
 
-    # Save uploaded file temporarily
     with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    # Step 1: Extract CV data
     data = extract_cv_data_from_file(tmp_path, file.content_type)
     if "error" in data:
         return {"message": "CV extraction failed", "error": data["error"]}
 
-    # Step 2: Save CV record in DB
     saved_cv = await save_extracted_cv_data(
         user_id=current_user["id"],
         parsed_data=data,
@@ -118,22 +115,17 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    # Step 3: Generate missing field / skill suggestions
     softskills_suggestions = []
     technical_skills_suggestions = []
 
-    # ✅ Call suggestions if soft/hard skills are missing
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
             suggestions = await generate_missing_field_suggestions(data)
 
-            # 🔍 Print suggestions
-            print("\n=== Suggestions Returned by generate_missing_field_suggestions ===")
-            print(suggestions)
-            print("================================================================\n")
+         
 
         except Exception as e:
-            print(f"❌ Error in generate_missing_field_suggestions: {e}")
+            
             suggestions = {
                 "softskills_suggestions": [],
                 "technical_skills_suggestions": []
@@ -142,7 +134,6 @@ async def extract_cv(
         softskills_suggestions = suggestions.get("softskills_suggestions", [])
         technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
 
-    # Step 4: Save skill suggestions in DB
     inserted_id = await save_skill_suggestions(
         user_id=current_user["id"],
         cv_id=cv_id_str,
@@ -151,28 +142,16 @@ async def extract_cv(
         db=db
     )
 
-    # Step 5: Generate CV summary
     summary = await get_cv_summary(data)
 
-    # 🔍 Print summary too
-    print("\n=== Summary Returned by get_cv_summary ===")
-    print(summary)
-    print("==========================================\n")
+    
 
     # Step 6: Return full response
     return {
-        "cv_id": cv_id_str,
         "parsed_data": data,
         "summary": summary,
-        "softskills_suggestions": softskills_suggestions,
-        "technical_skills_suggestions": technical_skills_suggestions,
-        "skills_id": inserted_id,
         "message": "CV data extracted and saved successfully"
     }
-
-
-
-
 
 
 @router.get("/profile/summary")

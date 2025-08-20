@@ -67,9 +67,11 @@ async def get_profile_summary_service(db, current_user):
     }
 
 
+
 async def get_missing_field_questions_service(section: str, db, current_user):
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
+    skill_suggestions_collection = db["skill_suggestions"]
 
     user_id = str(current_user.get("_id"))
 
@@ -92,7 +94,18 @@ async def get_missing_field_questions_service(section: str, db, current_user):
         {"user_id": {"$in": [user_id, ObjectId(user_id)]}},
         sort=[("_id", -1)]
     )
-    parsed_data = latest_cv.get("parsed_data", {}) if latest_cv else {}
+
+    if not latest_cv:
+        return {
+            "success": False,
+            "reason": "No CV found for user.",
+            "section": section,
+            "questions": [],
+            "missing_fields": [],
+        }
+
+    parsed_data = latest_cv.get("parsed_data", {})
+    cv_id = str(latest_cv["_id"])
 
     questions_doc = await questions_collection.find_one({}) or {}
     questions_docs = questions_doc.get(section, [])
@@ -103,12 +116,10 @@ async def get_missing_field_questions_service(section: str, db, current_user):
         if q.get("parameter") and q["parameter"] != "Tools"
     ]
 
-
     missing_fields = []
-    hard_skills = parsed_data.get("Skills", {}).get("HardSkills", [])
-    tools = parsed_data.get("Tools", [])
 
-    if not hard_skills or not tools:
+    hard_skills = parsed_data.get("Skills", {}).get("HardSkills", [])
+    if not hard_skills:
         missing_fields.append("Technical Skills")
 
     for param in all_parameters:
@@ -119,6 +130,7 @@ async def get_missing_field_questions_service(section: str, db, current_user):
         if not parsed_key_path:
             missing_fields.append(param)
             continue
+
         keys = parsed_key_path.split(".")
         value = parsed_data
         for k in keys:
@@ -135,16 +147,27 @@ async def get_missing_field_questions_service(section: str, db, current_user):
             if all(not v or (isinstance(v, list) and len(v) == 0) for v in value.values()):
                 missing_fields.append(param)
 
-    llm_fields_needed = [
-        q.get("parameter")
-        for q in questions_docs
-        if q.get("parameter") in ("Technical Skills", "Soft Skills", "Certifications")
-        and q.get("parameter") in missing_fields
-    ]
-
     suggestions_data = {}
-    if llm_fields_needed:
-        suggestions_data = await generate_missing_field_suggestions(parsed_data, llm_fields_needed)
+
+    skill_doc = None
+    llm_suggestions = None
+
+    if any(field in missing_fields for field in ["Technical Skills", "Soft Skills"]):
+        skill_doc = await skill_suggestions_collection.find_one({"cv_id": cv_id})
+
+        if "Technical Skills" in missing_fields:
+            if skill_doc and skill_doc.get("technical_skills_suggestions"):
+                suggestions_data["Technical Skills"] = skill_doc["technical_skills_suggestions"]
+            else:
+                llm_suggestions = await generate_missing_field_suggestions(parsed_data)
+                suggestions_data["Technical Skills"] = llm_suggestions.get("technical_skills_suggestions", [])
+
+        if "Soft Skills" in missing_fields:
+            if skill_doc and skill_doc.get("softskills_suggestions"):
+                suggestions_data["Soft Skills"] = skill_doc["softskills_suggestions"]
+            else:
+                llm_suggestions = llm_suggestions or await generate_missing_field_suggestions(parsed_data)
+                suggestions_data["Soft Skills"] = llm_suggestions.get("softskills_suggestions", [])
 
     missing_questions = []
     for q in questions_docs:
@@ -152,7 +175,8 @@ async def get_missing_field_questions_service(section: str, db, current_user):
         if param in missing_fields:
             q_entry = {**q}
             if "_id" in q_entry:
-                q_entry["_id"] = str(q_entry["_id"]) 
+                q_entry["_id"] = str(q_entry["_id"])
+       
             if param in suggestions_data:
                 q_entry["options"] = suggestions_data[param]
             missing_questions.append(q_entry)
@@ -163,7 +187,9 @@ async def get_missing_field_questions_service(section: str, db, current_user):
         "count": len(missing_questions),
         "questions": missing_questions,
         "missing_fields": missing_fields,
+        "cv_id": cv_id,
     }
+
 
 async def get_audience_questions_service(db, current_user):
     uploads_collection = db["uploads"]

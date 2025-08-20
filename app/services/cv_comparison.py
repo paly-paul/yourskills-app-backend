@@ -29,7 +29,7 @@ async def get_cv_summary(parsed_data: dict):
     else:
         unknown.append("Certifications")
 
-    if parsed_data.get("Tools"):
+    if skills.get("Tools"):
         known.append("Tools")
     else:
         unknown.append("Tools")
