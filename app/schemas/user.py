@@ -1,14 +1,15 @@
 # app/schemas/__init__.py
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator, constr
 from typing import Optional, List, Dict, Union
 from datetime import datetime
 import uuid
 
-class UserCreate(BaseModel): 
-    username: str
-    email: EmailStr
-    password: str  
 
+
+class UserCreate(BaseModel):
+    username: constr(strip_whitespace=True, min_length=1)
+    email: EmailStr
+    password: constr(min_length=4)
 
 class UserLogin(BaseModel):
     username: Optional[str] = None

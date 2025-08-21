@@ -7,17 +7,12 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from docx import Document
 import re
-from typing import Dict
+from typing import Dict, List, Tuple
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-
-
-from datetime import datetime
-import re
-from dateutil import parser as date_parser
 
 def parse_duration(duration_str):
     try:
@@ -49,6 +44,7 @@ def parse_duration(duration_str):
         print("Duration parsing error:", str(e))
         return None
 
+
 def calculate_years_of_experience(work_experiences):
     total_months = 0
     for job in work_experiences:
@@ -56,13 +52,9 @@ def calculate_years_of_experience(work_experiences):
         parsed = parse_duration(duration_str)
         if parsed:
             start, end = parsed
-            
             months = (end.year - start.year) * 12 + (end.month - start.month) + 1
             total_months += max(0, months)
     return round(total_months / 12, 2)
-
-
-
 
 
 def clean_json(obj):
@@ -71,8 +63,9 @@ def clean_json(obj):
     elif isinstance(obj, list):
         return [clean_json(v) for v in obj]
     elif obj is None:
-        return ""  
+        return ""
     return obj
+
 
 def extract_docx_text(filepath):
     doc = Document(filepath)
@@ -84,6 +77,7 @@ def extract_docx_text(filepath):
                 if cell_text:
                     texts.append(cell_text)
     return "\n".join(texts)
+
 
 def extract_cv_data_from_file(filepath: str, mime_type: str):
     prompt = """ 
@@ -164,41 +158,18 @@ Given a resume file, extract structured JSON with the following fields:
 }
 
 Instructions:
-
-1. Extract data **only if explicitly mentioned** in the CV text.  
-2. Do NOT infer, guess, or summarize missing values. Leave any field empty (`""` or `[]`) if it is not clearly present.  
-
-3. For the **Skills** and **Tools** fields:
-   - Extract **HardSkills, SoftSkills, and Tools** if explicitly mentioned **anywhere in the CV except the WorkExperience section**, including Summary, Projects, or other sections.
-   - Extract skills listed as bullet points, comma-separated items, or inline lists.
-   - Categorize each skill as follows:
-     - "HardSkills": abstract abilities or knowledge areas, not specific software or platforms. Examples: Programming, Data Analysis, Cloud Computing, Machine Learning.
-     - "SoftSkills": personal or interpersonal qualities. Examples: Communication, Leadership, Team Work, Adaptability.
-     - "Tools": specific software, platforms, frameworks, programming languages, or technologies. Examples: Python, Excel, AWS, Salesforce, Tableau.
-   - Do NOT move a skill to Tools if it is described as a capability or knowledge area rather than a product, software, or platform.
-   - Include a skill in only one category. Do not infer categories.
-   - If no explicit skills or tools are present, leave all lists empty.
-
-4. For **YearsOfExperience**, calculate based on WorkExperience dates only.  
-   - Treat "Present" as today's date.  
-   - If dates are unclear, return `0.0`.  
-
-5. Never summarize or analyze the CV beyond what is explicitly written.  
-6. Return only valid JSON. Start with `{` and end with `}`. No markdown, no commentary.
-
-
-
-
+1. Extract data only if explicitly mentioned in the CV text.
+2. Do NOT infer, guess, or summarize missing values.
+3. For Skills and Tools: extract explicitly mentioned items and categorize into HardSkills, SoftSkills, Tools.
+4. For YearsOfExperience, calculate based on WorkExperience dates only.
+5. Return only valid JSON. Start with { and end with }.
 """
-
 
     try:
         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            
             file_text = extract_docx_text(filepath)
             content_input = [file_text, prompt]
         else:
-           
             file_bytes = pathlib.Path(filepath).read_bytes()
             content_input = [
                 {"mime_type": mime_type, "data": file_bytes},
@@ -219,7 +190,7 @@ Instructions:
         response_text = response_text[start_idx:end_idx+1]
 
         parsed_json = json.loads(response_text)
-        parsed_json = clean_json(parsed_json)  
+        parsed_json = clean_json(parsed_json)
 
         work_exp = parsed_json.get("WorkExperience", [])
         parsed_json["YearsOfExperience"] = calculate_years_of_experience(work_exp)
@@ -231,53 +202,62 @@ Instructions:
         return {"error": "Failed to parse CV data"}
 
 
+
 def predict_audience_type(parsed_data: Dict) -> str:
-    audience_type = None
-    student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
-
-    for ed in parsed_data.get("Education", []):
-        combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
-        if any(keyword in combined_fields for keyword in student_keywords):
-            return "Student"
-
     work_exp_list = parsed_data.get("WorkExperience", [])
-    has_current_job = any(
-        str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"] or
-        str(w.get("endDate", "")).strip().lower() in ["present", "current", "ongoing", ""]
+
+    work_periods = []
+    for job in work_exp_list:
+        duration_str = job.get("Duration", "")
+        parsed = parse_duration(duration_str)
+        if parsed:
+            work_periods.append(parsed)
+
+    work_periods.sort(key=lambda x: x[0])
+
+    merged_work: List[Tuple[datetime, datetime]] = []
+    for p in work_periods:
+        if not merged_work:
+            merged_work.append(p)
+        else:
+            last_start, last_end = merged_work[-1]
+            curr_start, curr_end = p
+            if curr_start <= last_end:  # overlap
+                merged_work[-1] = (last_start, max(last_end, curr_end))
+            else:
+                merged_work.append(p)
+
+    if isinstance(parsed_data.get("YearsOfExperience"), (int, float)):
+        total_years = float(parsed_data["YearsOfExperience"])
+    else:
+        total_years = sum((e - s).days for s, e in merged_work) / 365.0 if merged_work else 0.0
+
+    currently_working = any(
+        ("Duration" in w and re.search(r"(present|current|ongoing|now)", w["Duration"], re.IGNORECASE))
         for w in work_exp_list
     )
 
-    if "YearsOfExperience" in parsed_data and isinstance(parsed_data["YearsOfExperience"], (int, float)):
-        total_years = float(parsed_data["YearsOfExperience"])
+    def months_between(a: datetime, b: datetime) -> float:
+        return (b - a).days / 30.0
+
+    employment_gap = False
+    if not currently_working and merged_work:
+        last_end = merged_work[-1][1]
+        if months_between(last_end, datetime.today()) >= 12:
+            employment_gap = True
+
+    if not currently_working and employment_gap:
+        return "Job Seeker"
+    elif total_years <= 1:
+        return "Student"
+    elif 1 < total_years <= 4:
+        return "Early Professional"
+    elif total_years > 4:
+        return "Mid Career Pivot"
     else:
-        total_years = 0
-        for w in work_exp_list:
-            try:
-                start_raw = w.get("startDate")
-                end_raw = w.get("endDate")
-
-                start = datetime.strptime(str(start_raw), "%Y-%m-%d")
-                if not end_raw or str(end_raw).strip().lower() in ["present", "current", "ongoing"]:
-                    end = datetime.today()
-                else:
-                    end = datetime.strptime(str(end_raw), "%Y-%m-%d")
-
-                total_years += (end - start).days / 365
-            except Exception:
-                continue
-
-    if not audience_type:
-        if not has_current_job and total_years < 0.5:
-            return "Job Seeker"
-        elif total_years <= 3:
-            return "Early Professional (2-3 years of experience)"
-        else:
-            return "Mid - Career Pivot"
-
-    return audience_type
+        return "Early Professional"
 
 
-import json
 
 FIELD_MAPPING = {
     "softskills": "softskills_suggestions",
@@ -294,7 +274,6 @@ def normalize_key(key: str) -> str:
     return key.strip().lower().replace("_", "").replace(" ", "")
 
 def clean_llm_json_response(response_text: str) -> str:
-    """Remove markdown fences and extract clean JSON substring."""
     response_text = response_text.strip()
     if response_text.startswith("```json"):
         response_text = response_text[len("```json"):].strip()
@@ -318,7 +297,7 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     }
 
     missing_fields = []
-    generate_technical = False 
+    generate_technical = False
 
     if not cv_context.get("Skills", {}).get("SoftSkills"):
         missing_fields.append("SoftSkills")
@@ -340,9 +319,8 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     )
 
     response = await model.generate_content_async(prompt)
-
-    
     cleaned = clean_llm_json_response(response.text)
+
     try:
         parsed = json.loads(cleaned)
     except Exception as e:
@@ -369,6 +347,5 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
 
     suggestions["softskills_suggestions"] = list(set(suggestions["softskills_suggestions"]))
     suggestions["technical_skills_suggestions"] = list(set(suggestions["technical_skills_suggestions"]))
-
 
     return suggestions

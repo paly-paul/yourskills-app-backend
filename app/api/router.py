@@ -144,9 +144,6 @@ async def extract_cv(
 
     summary = await get_cv_summary(data)
 
-    
-
-    # Step 6: Return full response
     return {
         "parsed_data": data,
         "summary": summary,

@@ -67,7 +67,6 @@ async def get_profile_summary_service(db, current_user):
     }
 
 
-
 async def get_missing_field_questions_service(section: str, db, current_user):
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
@@ -204,51 +203,7 @@ async def get_audience_questions_service(db, current_user):
 
     parsed_data = latest_cv["parsed_data"]
 
-    audience_type = None
-
-    education_list = parsed_data.get("Education", [])
-    student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
-
-    for ed in education_list:
-        combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
-        if any(keyword in combined_fields for keyword in student_keywords):
-            audience_type = "Student"
-            break
-
-    work_exp_list = parsed_data.get("WorkExperience", [])
-    has_current_job = any(
-        str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"]
-        or str(w.get("endDate", "")).strip().lower() in ["present", "current", "ongoing", ""]
-        for w in work_exp_list
-    )
-
-    if "YearsOfExperience" in parsed_data and isinstance(parsed_data["YearsOfExperience"], (int, float)):
-        total_years = float(parsed_data["YearsOfExperience"])
-    else:
-        total_years = 0
-
-    for w in work_exp_list:
-        try:
-            start_raw = w.get("startDate")
-            end_raw = w.get("endDate")
-
-            start = datetime.strptime(str(start_raw), "%Y-%m-%d")
-            if not end_raw or str(end_raw).strip().lower() in ["present", "current", "ongoing"]:
-                end = datetime.today()
-            else:
-                end = datetime.strptime(str(end_raw), "%Y-%m-%d")
-
-            total_years += (end - start).days / 365
-        except Exception:
-            continue
-
-    if not audience_type:
-        if not has_current_job and total_years < 0.5:
-            audience_type = "Job Seeker"
-        elif total_years <= 3:
-            audience_type = "Early Professional (2-3 years of experience)"
-        else:
-            audience_type = "Mid - Career Pivot"
+    audience_type = predict_audience_type(parsed_data)
 
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
@@ -267,57 +222,11 @@ async def get_audience_questions_service(db, current_user):
     }
 
 
-async def get_anchor_questions(parsed_data: dict) -> str:
-    """Classify audience type from parsed CV data."""
-    audience_type = None
-
-    education_list = parsed_data.get("Education", [])
-    student_keywords = ["ongoing", "present", "currently pursuing", "in progress", "pursuing"]
-
-    for ed in education_list:
-        combined_fields = " ".join(str(v).lower() for v in ed.values() if v)
-        if any(keyword in combined_fields for keyword in student_keywords):
-            return "Student"
-
- 
-    work_exp_list = parsed_data.get("WorkExperience", [])
-    has_current_job = any(
-        str(w.get("isCurrent", "")).strip().lower() in ["true", "yes", "1"]
-        or str(w.get("endDate", "")).strip().lower() in ["present", "current", "ongoing", ""]
-        for w in work_exp_list
-    )
-
-    total_years = float(parsed_data.get("YearsOfExperience", 0) or 0)
-
-    for w in work_exp_list:
-        try:
-            start_raw = w.get("startDate")
-            end_raw = w.get("endDate")
-
-            start = datetime.strptime(str(start_raw), "%Y-%m-%d")
-            if not end_raw or str(end_raw).strip().lower() in ["present", "current", "ongoing"]:
-                end = datetime.today()
-            else:
-                end = datetime.strptime(str(end_raw), "%Y-%m-%d")
-
-            total_years += (end - start).days / 365
-        except Exception:
-            continue
-
-    if not has_current_job and total_years < 0.5:
-        return "Job Seeker"
-    elif total_years <= 3:
-        return "Early Professional (2-3 years of experience)"
-    else:
-        return "Mid - Career Pivot"
-
-
 async def get_questions_by_audience(db, current_user, attribute_type: str):
     """Fetch questions based on audience type and attribute category (Job/Anchor)."""
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
-    # Fetch latest CV
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"])},
         sort=[("_id", -1)]
@@ -328,7 +237,7 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
     parsed_data = latest_cv["parsed_data"]
 
 
-    audience_type = await get_anchor_questions(parsed_data)
+    audience_type =  predict_audience_type(parsed_data)
 
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:

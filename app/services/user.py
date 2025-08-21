@@ -50,7 +50,7 @@ async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_
         "uploaded_at": datetime.utcnow()
     }
     result = await db.uploads.insert_one(upload_doc)
-    upload_doc["_id"] = result.inserted_id  # <-- return the inserted ID
+    upload_doc["_id"] = result.inserted_id 
 
     profile_update = {
         "bio": parsed_data.get("Summary", ""),
@@ -87,5 +87,4 @@ async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_
                     "skill_id": skill_id
                 })
 
-    # Return the full inserted document
     return upload_doc

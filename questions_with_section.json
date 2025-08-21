@@ -277,7 +277,7 @@
       ]
     },
     {
-      "audienceType": "Mid - Career Pivot",
+      "audienceType": "Mid Career Pivot",
       "questions": [
         {
           "parameter": "Core Tasks + Supplementary Tasks",
@@ -375,29 +375,15 @@
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
           "question": "What kind of things light you up — things that pull you in without much effort?",
-          "iconfilename": "interests.png",
-          "options": [
-            "Exploring new places or cultures",
-            "Solving puzzles or mental challenges",
-            "Learning how things work",
-            "Helping others or giving advice",
-            "Organizing or planning things",
-            "Trying out new tools, apps, or gadgets",
-            "Expressing myself through writing, design, or performance",
-            "Doing hands-on or physical activities",
-            "Reading, watching documentaries, or researching topics",
-            "[Other] (Add your own)"
-          ]
+          "iconfilename": "interests.png"
         },
         {
           "parameter": "Achievements",
           "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
           "iconfilename": "trophy.png",
           "options": [
-            "Completed a major project under pressure",
-            "Solved a tough problem others couldn’t crack",
-            "Helped a team or process run smoother",
-            "Add your own"
+            "Yes",
+            "No"
           ]
         },
         {
@@ -464,29 +450,15 @@
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
           "question": "What do you enjoy doing when you're not studying?",
-          "iconfilename": "interests.png",
-          "options": [
-            "Exploring new places or cultures",
-            "Solving puzzles or mental challenges",
-            "Learning how things work",
-            "Helping others or giving advice",
-            "Organizing or planning things",
-            "Trying out new tools, apps, or gadgets",
-            "Expressing myself through writing, design, or performance",
-            "Doing hands-on or physical activities",
-            "Reading, watching documentaries, or researching topics",
-            "[Other] (Add your own)"
-          ]
+          "iconfilename": "interests.png"
         },
         {
           "parameter": "Achievements",
           "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
           "iconfilename": "trophy.png",
           "options": [
-            "Completed a major project under pressure",
-            "Solved a tough problem others couldn’t crack",
-            "Helped a team or process run smoother",
-            "Add your own"
+            "Yes",
+            "No"
           ]
         },
         {
@@ -547,34 +519,20 @@
       ]
     },
     {
-      "audienceType": "Mid - Career Pivot",
+      "audienceType": "Mid Career Pivot",
       "questions": [
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
           "question": "What kind of things light you up — things that pull you in without much effort?",
-          "iconfilename": "interests.png",
-          "options": [
-            "Exploring new places or cultures",
-            "Solving puzzles or mental challenges",
-            "Learning how things work",
-            "Helping others or giving advice",
-            "Organizing or planning things",
-            "Trying out new tools, apps, or gadgets",
-            "Expressing myself through writing, design, or performance",
-            "Doing hands-on or physical activities",
-            "Reading, watching documentaries, or researching topics",
-            "[Other] (Add your own)"
-          ]
+          "iconfilename": "interests.png"
         },
         {
           "parameter": "Achievements",
           "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
           "iconfilename": "trophy.png",
           "options": [
-            "Completed a major project under pressure",
-            "Solved a tough problem others couldn’t crack",
-            "Helped a team or process run smoother",
-            "Add your own"
+            "Yes",
+            "No"
           ]
         },
         {
@@ -641,29 +599,15 @@
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
           "question": "What kind of things light you up — things that pull you in without much effort?",
-          "iconfilename": "interests.png",
-          "options": [
-            "Exploring new places or cultures",
-            "Solving puzzles or mental challenges",
-            "Learning how things work",
-            "Helping others or giving advice",
-            "Organizing or planning things",
-            "Trying out new tools, apps, or gadgets",
-            "Expressing myself through writing, design, or performance",
-            "Doing hands-on or physical activities",
-            "Reading, watching documentaries, or researching topics",
-            "[Other] (Add your own)"
-          ]
+          "iconfilename": "interests.png"
         },
         {
           "parameter": "Achievements",
           "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
           "iconfilename": "trophy.png",
           "options": [
-            "Completed a major project under pressure",
-            "Solved a tough problem others couldn’t crack",
-            "Helped a team or process run smoother",
-            "Add your own"
+            "Yes",
+            "No"
           ]
         },
         {
