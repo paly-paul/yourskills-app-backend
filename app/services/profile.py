@@ -215,10 +215,19 @@ async def get_audience_questions_service(db, current_user):
 
 
 
+
+
+
+def normalize_parameter(param):
+    """Convert uploads params (array) into the same format as questions collection"""
+    if isinstance(param, list):
+        return " + ".join(param)
+    return param
+
 async def get_questions_by_audience(db, current_user, attribute_type: str):
-    """Fetch questions from uploads (anchor_questions_with_options) if parameter matches,
-    and include remaining parameters from questions collection (except duplicates)."""
-    
+    """Fetch questions based on audience type and attribute category (Job/Anchor).
+       Two parameters come from uploads (with options), rest from questions collection.
+    """
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
@@ -235,66 +244,57 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
     # 2. Predict audience type
     audience_type = predict_audience_type(parsed_data)
 
-    # 3. Fetch reference parameters from questions collection
+    # 3. Fetch questions collection
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
 
     attributes = questions_doc.get(attribute_type, [])
-
-    # 4. Find matching block for audienceType
-    matching_block = next((item for item in attributes if item.get("audienceType") == audience_type), None)
-    if not matching_block:
+    matching_entry = next(
+        (item for item in attributes if item.get("audienceType") == audience_type),
+        None
+    )
+    if not matching_entry:
         raise HTTPException(
             status_code=404,
-            detail=f"No {attribute_type.lower()} attributes found for audience type: {audience_type}"
+            detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
 
-    # 5. Collect parameters from questions collection
-    collection_questions = matching_block.get("questions", [])
-
-    # 6. Compare with uploads.anchor_questions_with_options
-    upload_questions = latest_cv.get("anchor_questions_with_options", [])
     results = []
 
-    used_parameters = set()
+    # 4. Special parameters (must come from uploads)
+    special_params = [
+        "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+    ]
 
-    # First add from uploads if parameter matches
-    for cq in collection_questions:
-        param = cq.get("parameter")
-        upload_entry = next((item for item in upload_questions if item.get("parameter") == param), None)
-
-        if upload_entry:
+    # 5. Add from uploads (anchor_questions_with_options)
+    upload_questions = latest_cv.get("anchor_questions_with_options", [])
+    for uq in upload_questions:
+        param = normalize_parameter(uq.get("parameters"))
+        if param in special_params:
             results.append({
                 "parameter": param,
-                "question": upload_entry.get("question"),
-                "options": upload_entry.get("options", []),
-                "source": "uploads"   # mark source
+                "question": uq.get("question"),
+                "options": uq.get("options", []),
+                "iconfilename": uq.get("iconfilename"),
+                "source": "uploads"
             })
-            used_parameters.add(param)
 
-    # Then add remaining questions from questions_collection
-    for cq in collection_questions:
-        param = cq.get("parameter")
-        if param not in used_parameters:
+    # 6. Add from questions collection (skip already added special ones)
+    for cq in matching_entry.get("questions", []):
+        param = normalize_parameter(cq.get("parameter"))
+        if param not in [r["parameter"] for r in results]:  # avoid duplicates
             results.append({
                 "parameter": param,
                 "question": cq.get("question"),
+                "options": cq.get("options", []),
                 "iconfilename": cq.get("iconfilename"),
                 "source": "questions_collection"
             })
 
-    if not results:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No questions found for audience type: {audience_type}"
-        )
-
     return {
         "success": True,
         "audienceType": audience_type,
-        "data": results
+        "questions": results,
     }
-
-
-

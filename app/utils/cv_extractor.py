@@ -8,6 +8,7 @@ import google.generativeai as genai
 from docx import Document
 import re
 from typing import Dict, List, Tuple
+from collections import defaultdict
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -221,7 +222,7 @@ def predict_audience_type(parsed_data: Dict) -> str:
         else:
             last_start, last_end = merged_work[-1]
             curr_start, curr_end = p
-            if curr_start <= last_end:  # overlap
+            if curr_start <= last_end:  
                 merged_work[-1] = (last_start, max(last_end, curr_end))
             else:
                 merged_work.append(p)
@@ -349,19 +350,26 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     return suggestions
 
 
+
 async def generate_job_attribute_options(cv_context: dict, questions_from_db: list) -> dict:
     """
-    Generates exactly 5 short multiple-choice options (A–E) for each job attribute question.
-    Each question comes from DB with: parameter, question_text, iconfilename.
+    Generates multiple-choice options for each job attribute question.
+    Each parameter contributes exactly 5 options.
+    If the parameter string has multiple joined with '+', 
+    total options = 5 * number_of_parameters.
     """
     results = []
-
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
 
     for q in questions_from_db:
-        parameter = q.get("parameter")
+        parameter = q.get("parameter", "")
         question_text = q.get("question")
         iconfilename = q.get("iconfilename")
+
+        parameter_list = [p.strip() for p in parameter.split("+")]
+        option_count = 5 * len(parameter_list)
+
+        labels = [chr(65 + i) for i in range(option_count)]  # ['A','B','C'...]
 
         prompt = (
             "You are an AI assistant generating career-related multiple-choice options.\n\n"
@@ -370,16 +378,12 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             "Respond ONLY in JSON format:\n"
             "{\n"
             "  \"options\": [\n"
-            "    \"A. <short phrase>\",\n"
-            "    \"B. <short phrase>\",\n"
-            "    \"C. <short phrase>\",\n"
-            "    \"D. <short phrase>\",\n"
-            "    \"E. <short phrase>\"\n"
-            "  ]\n"
+            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
+            "\n  ]\n"
             "}\n\n"
-            "⚠️ RULES:\n"
-            "- Always provide EXACTLY 5 options.\n"
-            "- Each option must begin with A., B., C., D., or E.\n"
+            "RULES:\n"
+            f"- Always provide EXACTLY {option_count} options.\n"
+            f"- Each option must begin with {', '.join(labels)}.\n"
             "- Keep options SHORT (2–5 words, no full sentences).\n"
             "- Options must be distinct and meaningful."
         )
@@ -391,23 +395,20 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
             options = parsed.get("options", [])
 
-            # 🔹 Ensure exactly 5 options with A–E format
-            labels = ["A", "B", "C", "D", "E"]
             formatted_options = []
-            for i in range(5):
+            for i in range(option_count):
                 if i < len(options):
                     opt_text = options[i].strip()
                 else:
                     opt_text = f"Option {i+1}"
 
-                # enforce A.–E.
                 if not opt_text.startswith(f"{labels[i]}."):
                     opt_text = f"{labels[i]}. {opt_text}"
 
                 formatted_options.append(opt_text)
 
             results.append({
-                "parameter": parameter,
+                "parameters": parameter_list,
                 "question": question_text,
                 "iconfilename": iconfilename,
                 "options": formatted_options
@@ -415,28 +416,25 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
         except Exception:
             results.append({
-                "parameter": parameter,
+                "parameters": parameter_list,
                 "question": question_text,
                 "iconfilename": iconfilename,
-                "options": [
-                    "A. Option 1",
-                    "B. Option 2",
-                    "C. Option 3",
-                    "D. Option 4",
-                    "E. Option 5"
-                ]
+                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
             })
 
     return {
         "success": True,
         "suggestions": results
     }
-    
-    
+
+
+
 async def generate_anchor_attribute_options(parsed_data, questions):
     """
     Generate multiple-choice options for specific Anchor parameters.
-    Returns { "suggestions": [ {parameter, question, options} ] }
+    Each parameter contributes 5 options.
+    If parameter string has multiple (joined with '+'), total = 5 × number_of_parameters.
+    Returns { "suggestions": [ {parameters, question, iconfilename, options} ] }
     """
     target_parameters = {
         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
@@ -455,6 +453,11 @@ async def generate_anchor_attribute_options(parsed_data, questions):
         question_text = q.get("question")
         iconfilename = q.get("iconfilename")
 
+        parameter_list = [p.strip() for p in parameter.split("+")]
+        option_count = 5 * len(parameter_list)
+
+        labels = [chr(65 + i) for i in range(option_count)]
+
         prompt = (
             "You are an AI assistant generating career-related multiple-choice options.\n\n"
             f"CV Context:\n{context_str}\n\n"
@@ -462,13 +465,14 @@ async def generate_anchor_attribute_options(parsed_data, questions):
             "Respond ONLY in JSON format:\n"
             "{\n"
             "  \"options\": [\n"
-            "    \"A. <short phrase>\",\n"
-            "    \"B. <short phrase>\",\n"
-            "    \"C. <short phrase>\",\n"
-            "    \"D. <short phrase>\",\n"
-            "    \"E. <short phrase>\"\n"
-            "  ]\n"
-            "}\n"
+            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
+            "\n  ]\n"
+            "}\n\n"
+            "RULES:\n"
+            f"- Always provide EXACTLY {option_count} options.\n"
+            f"- Each option must begin with {', '.join(labels)}.\n"
+            "- Keep options SHORT (2–5 words, no full sentences).\n"
+            "- Options must be distinct and meaningful."
         )
 
         try:
@@ -477,32 +481,25 @@ async def generate_anchor_attribute_options(parsed_data, questions):
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
-            # Guarantee 5 A–E
-            labels = ["A", "B", "C", "D", "E"]
             formatted = []
-            for i in range(5):
+            for i in range(option_count):
                 opt = options[i].strip() if i < len(options) else f"Option {i+1}"
                 if not opt.startswith(f"{labels[i]}."):
                     opt = f"{labels[i]}. {opt}"
                 formatted.append(opt)
 
             suggestions.append({
-                "parameter": parameter,
+                "parameters": parameter_list,   
                 "question": question_text,
                 "iconfilename": iconfilename,
                 "options": formatted
             })
         except Exception:
             suggestions.append({
-                "parameter": parameter,
+                "parameters": parameter_list,
                 "question": question_text,
-                "options": [
-                    "A. Option 1",
-                    "B. Option 2",
-                    "C. Option 3",
-                    "D. Option 4",
-                    "E. Option 5"
-                ]
+                "iconfilename": iconfilename,
+                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
             })
 
     return {"suggestions": suggestions}

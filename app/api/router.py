@@ -107,12 +107,10 @@ async def extract_cv(
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    # 1. Extract CV
     data = extract_cv_data_from_file(tmp_path, file.content_type)
     if "error" in data:
         return {"message": "CV extraction failed", "error": data["error"]}
 
-    # 2. Save raw CV
     saved_cv = await save_extracted_cv_data(
         user_id=current_user["id"],
         parsed_data=data,
@@ -121,7 +119,6 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    # 3. Generate skill suggestions
     softskills_suggestions, technical_skills_suggestions = [], []
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
@@ -140,16 +137,15 @@ async def extract_cv(
         db=db
     )
 
-    # 4. Generate job attribute questions + options
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
 
     job_questions_with_options = []
-    anchor_questions_with_options = []  # <-- new
+    anchor_questions_with_options = []  
 
     if questions_doc:
-        # --- Job attributes ---
+
         job_attributes = questions_doc.get("Job attributes", [])
         matching_job = next((item for item in job_attributes if item.get("audienceType") == audience_type), None)
 
@@ -158,7 +154,6 @@ async def extract_cv(
             job_options = await generate_job_attribute_options(data, job_questions)
             job_questions_with_options = job_options["suggestions"]
 
-        # --- Anchor attributes ---
         anchor_attributes = questions_doc.get("Anchor attributes", [])
         matching_anchor = next((item for item in anchor_attributes if item.get("audienceType") == audience_type), None)
 
@@ -167,7 +162,7 @@ async def extract_cv(
             anchor_options = await generate_anchor_attribute_options(data, anchor_questions)
             anchor_questions_with_options = anchor_options["suggestions"]
 
-        # --- Save both into uploads ---
+
         uploads_collection = db["uploads"]
         await uploads_collection.update_one(
             {"_id": saved_cv["_id"]},
@@ -178,18 +173,15 @@ async def extract_cv(
             }}
         )
 
-    # 5. Generate CV summary
     summary = await get_cv_summary(data)
 
     return {
         "parsed_data": data,
         "summary": summary,
         "audienceType": audience_type,
-        "anchor_questions_with_options": anchor_questions_with_options,
+
         "message": "CV data extracted and saved successfully"
     }
-
-
 
 
 @router.get("/profile/summary")
