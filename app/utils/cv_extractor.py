@@ -202,7 +202,6 @@ Instructions:
         return {"error": "Failed to parse CV data"}
 
 
-
 def predict_audience_type(parsed_data: Dict) -> str:
     work_exp_list = parsed_data.get("WorkExperience", [])
 
@@ -251,12 +250,11 @@ def predict_audience_type(parsed_data: Dict) -> str:
     elif total_years <= 1:
         return "Student"
     elif 1 < total_years <= 4:
-        return "Early Professional"
+        return "Early Professional (2-3 years of experience)"
     elif total_years > 4:
         return "Mid Career Pivot"
     else:
-        return "Early Professional"
-
+        return "Early Professional (2-3 years of experience)"
 
 
 FIELD_MAPPING = {
@@ -349,3 +347,163 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     suggestions["technical_skills_suggestions"] = list(set(suggestions["technical_skills_suggestions"]))
 
     return suggestions
+
+
+async def generate_job_attribute_options(cv_context: dict, questions_from_db: list) -> dict:
+    """
+    Generates exactly 5 short multiple-choice options (A–E) for each job attribute question.
+    Each question comes from DB with: parameter, question_text, iconfilename.
+    """
+    results = []
+
+    context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
+
+    for q in questions_from_db:
+        parameter = q.get("parameter")
+        question_text = q.get("question")
+        iconfilename = q.get("iconfilename")
+
+        prompt = (
+            "You are an AI assistant generating career-related multiple-choice options.\n\n"
+            f"CV Context:\n{context_str}\n\n"
+            f"Question: {question_text}\n\n"
+            "Respond ONLY in JSON format:\n"
+            "{\n"
+            "  \"options\": [\n"
+            "    \"A. <short phrase>\",\n"
+            "    \"B. <short phrase>\",\n"
+            "    \"C. <short phrase>\",\n"
+            "    \"D. <short phrase>\",\n"
+            "    \"E. <short phrase>\"\n"
+            "  ]\n"
+            "}\n\n"
+            "⚠️ RULES:\n"
+            "- Always provide EXACTLY 5 options.\n"
+            "- Each option must begin with A., B., C., D., or E.\n"
+            "- Keep options SHORT (2–5 words, no full sentences).\n"
+            "- Options must be distinct and meaningful."
+        )
+
+        try:
+            response = await model.generate_content_async(prompt)
+            cleaned = clean_llm_json_response(response.text)
+            parsed = json.loads(cleaned)
+
+            options = parsed.get("options", [])
+
+            # 🔹 Ensure exactly 5 options with A–E format
+            labels = ["A", "B", "C", "D", "E"]
+            formatted_options = []
+            for i in range(5):
+                if i < len(options):
+                    opt_text = options[i].strip()
+                else:
+                    opt_text = f"Option {i+1}"
+
+                # enforce A.–E.
+                if not opt_text.startswith(f"{labels[i]}."):
+                    opt_text = f"{labels[i]}. {opt_text}"
+
+                formatted_options.append(opt_text)
+
+            results.append({
+                "parameter": parameter,
+                "question": question_text,
+                "iconfilename": iconfilename,
+                "options": formatted_options
+            })
+
+        except Exception:
+            results.append({
+                "parameter": parameter,
+                "question": question_text,
+                "iconfilename": iconfilename,
+                "options": [
+                    "A. Option 1",
+                    "B. Option 2",
+                    "C. Option 3",
+                    "D. Option 4",
+                    "E. Option 5"
+                ]
+            })
+
+    return {
+        "success": True,
+        "suggestions": results
+    }
+    
+    
+async def generate_anchor_attribute_options(parsed_data, questions):
+    """
+    Generate multiple-choice options for specific Anchor parameters.
+    Returns { "suggestions": [ {parameter, question, options} ] }
+    """
+    target_parameters = {
+        "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+    }
+
+    context_str = "\n".join(f"{k}: {v}" for k, v in parsed_data.items() if v)
+
+    suggestions = []
+
+    for q in questions:
+        parameter = q.get("parameter")
+        if parameter not in target_parameters:
+            continue
+
+        question_text = q.get("question")
+        iconfilename = q.get("iconfilename")
+
+        prompt = (
+            "You are an AI assistant generating career-related multiple-choice options.\n\n"
+            f"CV Context:\n{context_str}\n\n"
+            f"Question: {question_text}\n\n"
+            "Respond ONLY in JSON format:\n"
+            "{\n"
+            "  \"options\": [\n"
+            "    \"A. <short phrase>\",\n"
+            "    \"B. <short phrase>\",\n"
+            "    \"C. <short phrase>\",\n"
+            "    \"D. <short phrase>\",\n"
+            "    \"E. <short phrase>\"\n"
+            "  ]\n"
+            "}\n"
+        )
+
+        try:
+            response = await model.generate_content_async(prompt)
+            cleaned = clean_llm_json_response(response.text)
+            parsed = json.loads(cleaned)
+            options = parsed.get("options", [])
+
+            # Guarantee 5 A–E
+            labels = ["A", "B", "C", "D", "E"]
+            formatted = []
+            for i in range(5):
+                opt = options[i].strip() if i < len(options) else f"Option {i+1}"
+                if not opt.startswith(f"{labels[i]}."):
+                    opt = f"{labels[i]}. {opt}"
+                formatted.append(opt)
+
+            suggestions.append({
+                "parameter": parameter,
+                "question": question_text,
+                "iconfilename": iconfilename,
+                "options": formatted
+            })
+        except Exception:
+            suggestions.append({
+                "parameter": parameter,
+                "question": question_text,
+                "options": [
+                    "A. Option 1",
+                    "B. Option 2",
+                    "C. Option 3",
+                    "D. Option 4",
+                    "E. Option 5"
+                ]
+            })
+
+    return {"suggestions": suggestions}
+

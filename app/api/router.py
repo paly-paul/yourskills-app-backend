@@ -95,18 +95,24 @@ async def extract_cv(
     current_user=Depends(get_current_user)
 ):
     import tempfile
-    from app.utils.cv_extractor import extract_cv_data_from_file, generate_missing_field_suggestions
-    from app.services.cv_comparison import get_cv_summary
-    from app.services.skill_suggestions import save_skill_suggestions
+    from app.utils.cv_extractor import (
+        extract_cv_data_from_file,
+        generate_missing_field_suggestions,
+        predict_audience_type,
+        generate_job_attribute_options,
+        generate_anchor_attribute_options
+    )
 
     with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
 
+    # 1. Extract CV
     data = extract_cv_data_from_file(tmp_path, file.content_type)
     if "error" in data:
         return {"message": "CV extraction failed", "error": data["error"]}
 
+    # 2. Save raw CV
     saved_cv = await save_extracted_cv_data(
         user_id=current_user["id"],
         parsed_data=data,
@@ -115,26 +121,18 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    softskills_suggestions = []
-    technical_skills_suggestions = []
-
+    # 3. Generate skill suggestions
+    softskills_suggestions, technical_skills_suggestions = [], []
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
             suggestions = await generate_missing_field_suggestions(data)
-
-         
-
-        except Exception as e:
-            
-            suggestions = {
-                "softskills_suggestions": [],
-                "technical_skills_suggestions": []
-            }
+        except Exception:
+            suggestions = {"softskills_suggestions": [], "technical_skills_suggestions": []}
 
         softskills_suggestions = suggestions.get("softskills_suggestions", [])
         technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
 
-    inserted_id = await save_skill_suggestions(
+    await save_skill_suggestions(
         user_id=current_user["id"],
         cv_id=cv_id_str,
         softskills=softskills_suggestions,
@@ -142,13 +140,56 @@ async def extract_cv(
         db=db
     )
 
+    # 4. Generate job attribute questions + options
+    questions_collection = db["questions"]
+    questions_doc = await questions_collection.find_one({})
+    audience_type = predict_audience_type(data)
+
+    job_questions_with_options = []
+    anchor_questions_with_options = []  # <-- new
+
+    if questions_doc:
+        # --- Job attributes ---
+        job_attributes = questions_doc.get("Job attributes", [])
+        matching_job = next((item for item in job_attributes if item.get("audienceType") == audience_type), None)
+
+        if matching_job:
+            job_questions = matching_job.get("questions", [])
+            job_options = await generate_job_attribute_options(data, job_questions)
+            job_questions_with_options = job_options["suggestions"]
+
+        # --- Anchor attributes ---
+        anchor_attributes = questions_doc.get("Anchor attributes", [])
+        matching_anchor = next((item for item in anchor_attributes if item.get("audienceType") == audience_type), None)
+
+        if matching_anchor:
+            anchor_questions = matching_anchor.get("questions", [])
+            anchor_options = await generate_anchor_attribute_options(data, anchor_questions)
+            anchor_questions_with_options = anchor_options["suggestions"]
+
+        # --- Save both into uploads ---
+        uploads_collection = db["uploads"]
+        await uploads_collection.update_one(
+            {"_id": saved_cv["_id"]},
+            {"$set": {
+                "audienceType": audience_type,
+                "job_questions_with_options": job_questions_with_options,
+                "anchor_questions_with_options": anchor_questions_with_options
+            }}
+        )
+
+    # 5. Generate CV summary
     summary = await get_cv_summary(data)
 
     return {
         "parsed_data": data,
         "summary": summary,
+        "audienceType": audience_type,
+        "anchor_questions_with_options": anchor_questions_with_options,
         "message": "CV data extracted and saved successfully"
     }
+
+
 
 
 @router.get("/profile/summary")

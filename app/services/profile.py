@@ -192,7 +192,6 @@ async def get_missing_field_questions_service(section: str, db, current_user):
 
 async def get_audience_questions_service(db, current_user):
     uploads_collection = db["uploads"]
-    questions_collection = db["questions"]
 
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"])},
@@ -201,32 +200,29 @@ async def get_audience_questions_service(db, current_user):
     if not latest_cv or "parsed_data" not in latest_cv:
         raise HTTPException(status_code=404, detail="No CV data found for this user")
 
-    parsed_data = latest_cv["parsed_data"]
+    # 🔹 directly get audienceType + job_questions_with_options from uploads collection
+    audience_type = latest_cv.get("audienceType")
+    job_questions_with_options = latest_cv.get("job_questions_with_options", [])
 
-    audience_type = predict_audience_type(parsed_data)
-
-    questions_doc = await questions_collection.find_one({})
-    if not questions_doc:
-        raise HTTPException(status_code=404, detail="No questions collection found")
-
-    job_attributes = questions_doc.get("Job attributes", [])
-    matching_entry = next((item for item in job_attributes if item.get("audienceType") == audience_type), None)
-
-    if not matching_entry:
-        raise HTTPException(status_code=404, detail=f"No questions found for audience type: {audience_type}")
+    if not job_questions_with_options:
+        raise HTTPException(status_code=404, detail="No job questions found for this user")
 
     return {
         "success": True,
         "audienceType": audience_type,
-        "questions": matching_entry.get("questions", []),
+        "questions": job_questions_with_options,
     }
 
 
+
 async def get_questions_by_audience(db, current_user, attribute_type: str):
-    """Fetch questions based on audience type and attribute category (Job/Anchor)."""
+    """Fetch questions from uploads (anchor_questions_with_options) if parameter matches,
+    and include remaining parameters from questions collection (except duplicates)."""
+    
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
+    # 1. Get latest CV upload
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"])},
         sort=[("_id", -1)]
@@ -236,24 +232,69 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
 
     parsed_data = latest_cv["parsed_data"]
 
+    # 2. Predict audience type
+    audience_type = predict_audience_type(parsed_data)
 
-    audience_type =  predict_audience_type(parsed_data)
-
+    # 3. Fetch reference parameters from questions collection
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
 
     attributes = questions_doc.get(attribute_type, [])
-    matching_entry = next((item for item in attributes if item.get("audienceType") == audience_type), None)
 
-    if not matching_entry:
+    # 4. Find matching block for audienceType
+    matching_block = next((item for item in attributes if item.get("audienceType") == audience_type), None)
+    if not matching_block:
         raise HTTPException(
             status_code=404,
-            detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
+            detail=f"No {attribute_type.lower()} attributes found for audience type: {audience_type}"
+        )
+
+    # 5. Collect parameters from questions collection
+    collection_questions = matching_block.get("questions", [])
+
+    # 6. Compare with uploads.anchor_questions_with_options
+    upload_questions = latest_cv.get("anchor_questions_with_options", [])
+    results = []
+
+    used_parameters = set()
+
+    # First add from uploads if parameter matches
+    for cq in collection_questions:
+        param = cq.get("parameter")
+        upload_entry = next((item for item in upload_questions if item.get("parameter") == param), None)
+
+        if upload_entry:
+            results.append({
+                "parameter": param,
+                "question": upload_entry.get("question"),
+                "options": upload_entry.get("options", []),
+                "source": "uploads"   # mark source
+            })
+            used_parameters.add(param)
+
+    # Then add remaining questions from questions_collection
+    for cq in collection_questions:
+        param = cq.get("parameter")
+        if param not in used_parameters:
+            results.append({
+                "parameter": param,
+                "question": cq.get("question"),
+                "iconfilename": cq.get("iconfilename"),
+                "source": "questions_collection"
+            })
+
+    if not results:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No questions found for audience type: {audience_type}"
         )
 
     return {
         "success": True,
         "audienceType": audience_type,
-        "questions": matching_entry.get("questions", []),
+        "data": results
     }
+
+
+
