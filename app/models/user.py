@@ -78,3 +78,20 @@ class SkillSuggestionModel(BaseModel):
     softskills_suggestions: List[str] = Field(default_factory=list)
     technical_skills_suggestions: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class AnswerModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")
+    user_id: str
+    tenant_id: str
+    cv_id: str                          # link answers to a specific uploaded CV
+    section: str                        
+    parameter: str                      
+    answer_type: str                    
+    selected_options: List[str] = []    
+    free_text: Optional[str] = None     
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+
+
+

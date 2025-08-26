@@ -111,5 +111,16 @@ class ResumeExtractResponse(BaseModel):
     years_experience: Optional[int]
     skills: List[SkillIn]
 
+class AnswerCreate(BaseModel):
+    parameter: str
+    answer_type: str 
+    selected_options: Optional[List[str]] = None  
+    free_text: Optional[str] = None 
+
+
+class AnswersSubmit(BaseModel):
+    answers: List[AnswerCreate]
+
+
     class Config:
         orm_mode = True

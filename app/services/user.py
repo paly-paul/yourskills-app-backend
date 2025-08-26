@@ -1,11 +1,14 @@
 from datetime import datetime
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from fastapi import HTTPException
 
 from app.utils.hash import hash_password, generate_temp_password, generate_tenant_id
+from app.schemas.user import AnswerCreate
+from app.models.user import generate_uuid, AnswerModel 
 
 async def create_user(db: AsyncIOMotorDatabase, user: Dict[str, Any]) -> Dict[str, Any]:
     tenant_id = generate_tenant_id()
@@ -88,3 +91,49 @@ async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_
                 })
 
     return upload_doc
+
+async def save_latest_cv_answers(db, current_user: dict, section: str, answers: list):
+    """
+    Save answers for the latest uploaded CV.
+    """
+    user_id = current_user.get("id") or current_user.get("_id")
+
+    # make sure it's ObjectId
+    try:
+        user_id = ObjectId(str(user_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    # 1. Find the latest CV uploaded by the user
+    latest_cv = await db["uploads"].find_one(
+        {"user_id": user_id},
+        sort=[("uploaded_at", -1)]
+    )
+
+    if not latest_cv:
+        raise HTTPException(status_code=404, detail="No CV uploaded yet")
+
+    cv_id = str(latest_cv["_id"])
+
+    answer_docs = []
+    for ans in answers:
+        answer_docs.append(
+            AnswerModel(
+                user_id=str(user_id),
+                tenant_id=str(current_user.get("tenant_id")),
+                cv_id=cv_id,
+                section=section,
+                parameter=ans["parameter"],
+                answer_type=ans.get("answer_type", "Short text + Edit view"),
+                selected_options=ans.get("selected_options", []),
+                free_text=ans.get("free_text"),
+                created_at=datetime.utcnow()
+            ).dict(by_alias=True)
+        )
+
+    # 3. Insert into Mongo
+    if answer_docs:
+        await db["answers"].insert_many(answer_docs)
+
+    return {"message": "Answers saved successfully", "cv_id": cv_id}
+

@@ -3,6 +3,7 @@
     {
       "parameter": "Education",
       "questionText": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
+      "type": "Multi-select + Dropdown + Free text (For Others)",
       "iconFileName": "education",
       "options": [
         {
@@ -114,11 +115,13 @@
     {
       "parameter": "Experience",
       "questionText": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
+      "type": "Short text + Edit view",
       "iconFileName": "experience"
     },
     {
       "parameter": "Technical Skills",
       "questionText": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
+      "type": "Multiple select + Text entry",
       "iconFileName": "technical_skills"
     },
     {

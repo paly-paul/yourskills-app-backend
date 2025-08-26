@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.db.database import get_database
-from app.schemas import UserCreate, UserLogin, ForgotPasswordRequest
-from app.services.user import create_user, get_user_by_username, forgot_password, save_extracted_cv_data
+from app.schemas import UserCreate, UserLogin, ForgotPasswordRequest, AnswersSubmit
+from app.services.user import create_user, get_user_by_username, forgot_password, save_extracted_cv_data, save_latest_cv_answers
 from app.utils import verify_password
 from app.utils.cv_extractor import extract_cv_data_from_file, predict_audience_type, generate_missing_field_suggestions
 from app.utils.token import create_access_token, get_current_user
 from app.services.cv_comparison import get_cv_summary
+from motor.motor_asyncio import AsyncIOMotorDatabase
 import tempfile
 from bson import ObjectId
 import os
@@ -211,4 +212,48 @@ async def get_anchor_questions(
     current_user=Depends(get_current_user)
 ):
     return await get_questions_by_audience(db, current_user, "Anchor attributes")
+
+
+@router.post("/missing_questions/answers")
+async def submit_cv_missing_answers(
+    payload: dict,  # Ideally use a Pydantic schema
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    return await save_latest_cv_answers(
+        db=db,
+        current_user=current_user,
+        section="Cv Missing",
+        answers=payload["answers"]
+    )
+
+
+@router.post("/job-questions/answers")
+async def submit_job_attr_answers(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    return await save_latest_cv_answers(
+        db=db,
+        current_user=current_user,
+        section="Job Attributes",
+        answers=payload["answers"]
+    )
+
+
+@router.post("/anchor-questions/answers")
+async def submit_anchor_attr_answers(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    return await save_latest_cv_answers(
+        db=db,
+        current_user=current_user,
+        section="Anchor Attributes",
+        answers=payload["answers"]
+    )
+
+
 
