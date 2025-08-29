@@ -216,7 +216,7 @@ async def get_anchor_questions(
 
 @router.post("/missing_questions/answers")
 async def submit_cv_missing_answers(
-    payload: dict,  # Ideally use a Pydantic schema
+    payload: dict,  
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
@@ -254,6 +254,77 @@ async def submit_anchor_attr_answers(
         section="Anchor Attributes",
         answers=payload["answers"]
     )
+
+@router.get("/cv/latest/details")
+async def get_latest_cv_details(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    uploads_collection = db["uploads"]
+
+    user_id = str(current_user.get("_id"))
+
+    query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
+
+    cv_doc = await uploads_collection.find_one(
+        query,
+        sort=[("uploaded_at", DESCENDING)]
+    )
+
+    if not cv_doc:
+        raise HTTPException(status_code=404, detail="No CV uploaded yet")
+
+    parsed_data = cv_doc.get("parsed_data", {}) or {}
+
+
+    work_experiences = parsed_data.get("WorkExperience", []) or []
+
+    def parse_duration(duration_str: str):
+        import re
+        from dateutil import parser as date_parser
+        try:
+            parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
+            if len(parts) != 2:
+                return None
+            start_str, end_str = parts[0].strip(), parts[1].strip().lower()
+            start_date = date_parser.parse(start_str, fuzzy=True)
+            if any(x in end_str for x in ("present", "current", "ongoing")):
+                end_date = datetime.today()
+            else:
+                end_date = date_parser.parse(end_str, fuzzy=True)
+            return start_date, end_date
+        except Exception:
+            return None
+
+    job_role = None
+    latest_end = datetime.min
+    for job in work_experiences:
+        parsed = parse_duration(job.get("Duration", ""))
+        if parsed:
+            _, end = parsed
+            if end > latest_end:
+                latest_end = end
+                job_role = job.get("Role")
+
+  
+    formatted_data = {
+        "name": parsed_data.get("Name"),
+        "role": job_role or parsed_data.get("Role") or parsed_data.get("Title"),
+        "summary": parsed_data.get("Summary") or "",
+        "hard_skills": parsed_data.get("Skills", {}).get("HardSkills", []),
+        "soft_skills": parsed_data.get("Skills", {}).get("SoftSkills", []),
+        "tools": parsed_data.get("Skills", {}).get("Tools", []),
+        "education": parsed_data.get("Education", []),
+        "career_overview": parsed_data.get("YearsOfExperience"),
+        "certifications": parsed_data.get("Certifications", [])
+        
+    }
+
+    return {"success": True, "cv_details": formatted_data}
+
+
+
+
 
 
 

@@ -95,7 +95,8 @@ Given a resume file, extract structured JSON with the following fields:
   "Summary": "",
   "Skills": {
     "HardSkills": [],
-    "SoftSkills": []
+    "SoftSkills": [],
+    "Tools": []
   },
   
   "WorkExperience": [
