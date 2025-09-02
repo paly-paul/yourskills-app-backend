@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.db.database import get_database
 from app.schemas import UserCreate, UserLogin, ForgotPasswordRequest, AnswersSubmit
-from app.services.user import create_user, get_user_by_username, forgot_password, save_extracted_cv_data, save_latest_cv_answers
+from app.services.user import create_user, get_user_by_email, forgot_password, save_extracted_cv_data, save_latest_cv_answers
 from app.utils import verify_password
 from app.utils.cv_extractor import extract_cv_data_from_file, predict_audience_type, generate_missing_field_suggestions
 from app.utils.token import create_access_token, get_current_user
@@ -17,7 +17,6 @@ from datetime import datetime
 from pymongo import DESCENDING
 from app.services.skill_suggestions import save_skill_suggestions
 from app.services.profile import (
-    get_profile_summary_service,
     get_missing_field_questions_service,
     get_audience_questions_service,
     get_questions_by_audience
@@ -28,9 +27,10 @@ router = APIRouter()
 
 @router.post("/register")
 async def register(user: UserCreate, db=Depends(get_database)):
-    existing = await get_user_by_username(db, user.username)
+   
+    existing = await get_user_by_email(db, user.email)
     if existing:
-        return {"success": False, "reason": "Username already exists."}
+        return {"success": False, "reason": "Email already exists."}
 
     created_user = await create_user(db, user)
     token_data = {"user_id": str(created_user["_id"]), "username": created_user["username"]}
@@ -43,13 +43,11 @@ async def register(user: UserCreate, db=Depends(get_database)):
     }
 
 
+
 @router.post("/login")
 async def login(user: UserLogin, db=Depends(get_database)):
-    db_user = None
-    if user.username:
-        db_user = await get_user_by_username(db, user.username)
-    elif user.email:
-        db_user = await db["users"].find_one({"email": user.email})
+  
+    db_user = await db["users"].find_one({"email": user.email})
 
     if not db_user:
         return {"success": False, "reason": "User not found."}
@@ -57,7 +55,10 @@ async def login(user: UserLogin, db=Depends(get_database)):
     if not verify_password(user.password, db_user["password"]):
         return {"success": False, "reason": "Invalid password."}
 
-    token_data = {"user_id": str(db_user["_id"]), "username": db_user["username"]}
+    token_data = {
+        "user_id": str(db_user["_id"]),
+        "email": db_user["email"]  
+    }
     access_token = create_access_token(token_data)
 
     return {
@@ -65,7 +66,6 @@ async def login(user: UserLogin, db=Depends(get_database)):
         "token": access_token,
         "tenant_id": db_user["tenant_id"]
     }
-
 
 @router.get("/profile")
 def get_profile(current_user=Depends(get_current_user)):
@@ -120,6 +120,7 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
+    # ---- suggestions if skills missing ----
     softskills_suggestions, technical_skills_suggestions = [], []
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
@@ -138,6 +139,7 @@ async def extract_cv(
         db=db
     )
 
+    # ---- audience & job/anchor questions ----
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
@@ -146,7 +148,6 @@ async def extract_cv(
     anchor_questions_with_options = []  
 
     if questions_doc:
-
         job_attributes = questions_doc.get("Job attributes", [])
         matching_job = next((item for item in job_attributes if item.get("audienceType") == audience_type), None)
 
@@ -163,7 +164,6 @@ async def extract_cv(
             anchor_options = await generate_anchor_attribute_options(data, anchor_questions)
             anchor_questions_with_options = anchor_options["suggestions"]
 
-
         uploads_collection = db["uploads"]
         await uploads_collection.update_one(
             {"_id": saved_cv["_id"]},
@@ -176,18 +176,55 @@ async def extract_cv(
 
     summary = await get_cv_summary(data)
 
+    def parse_duration(duration_str: str):
+        import re
+        from dateutil import parser as date_parser
+        try:
+            parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
+            if len(parts) != 2:
+                return None
+            start_str, end_str = parts[0].strip(), parts[1].strip().lower()
+            start_date = date_parser.parse(start_str, fuzzy=True)
+            if any(x in end_str for x in ("present", "current", "ongoing")):
+                end_date = datetime.today()
+            else:
+                end_date = date_parser.parse(end_str, fuzzy=True)
+            return start_date, end_date
+        except Exception:
+            return None
+
+    job_role = None
+    latest_end = datetime.min
+    for job in data.get("WorkExperience", []) or []:
+        parsed = parse_duration(job.get("Duration", ""))
+        if parsed:
+            _, end = parsed
+            if end > latest_end:
+                latest_end = end
+                job_role = job.get("Role")
+
+    known_fields = len(summary.get("known", []))
+    unknown_fields = len(summary.get("unknown", []))
+    total_fields = known_fields + unknown_fields
+    known_percentage = round((known_fields / total_fields) * 100, 2) if total_fields else 0.0
+
     return {
         "parsed_data": data,
         "summary": summary,
         "audienceType": audience_type,
-
+        "candidate": {
+            "name": data.get("Name"),
+            "job_role": job_role,
+            "known_percentage": known_percentage
+        },
         "message": "CV data extracted and saved successfully"
     }
 
 
-@router.get("/profile/summary")
-async def get_my_profile_summary(db=Depends(get_database), current_user=Depends(get_current_user)):
-    return await get_profile_summary_service(db, current_user)
+
+# @router.get("/profile/summary")
+# async def get_my_profile_summary(db=Depends(get_database), current_user=Depends(get_current_user)):
+#     return await get_profile_summary_service(db, current_user)
 
 
 @router.get("/missing_questions")

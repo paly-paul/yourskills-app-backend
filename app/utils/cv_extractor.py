@@ -455,6 +455,7 @@ async def generate_anchor_attribute_options(parsed_data, questions):
             continue
 
         question_text = q.get("question")
+        type = q.get("type")
         iconfilename = q.get("iconfilename")
 
         parameter_list = [p.strip() for p in parameter.split("+")]
@@ -495,6 +496,7 @@ async def generate_anchor_attribute_options(parsed_data, questions):
             suggestions.append({
                 "parameters": parameter_list,   
                 "question": question_text,
+                "type": type,
                 "iconfilename": iconfilename,
                 "options": formatted
             })
@@ -502,6 +504,7 @@ async def generate_anchor_attribute_options(parsed_data, questions):
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
+                "type": type,
                 "iconfilename": iconfilename,
                 "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
             })

@@ -26,6 +26,8 @@ async def create_user(db: AsyncIOMotorDatabase, user: Dict[str, Any]) -> Dict[st
 
 async def get_user_by_username(db: AsyncIOMotorDatabase, username: str) -> Optional[Dict[str, Any]]:
     return await db.users.find_one({"username": username})
+async def get_user_by_email(db: AsyncIOMotorDatabase, email: str) -> Optional[Dict[str, Any]]:
+    return await db.users.find_one({"email": email})
 
 async def forgot_password(db: AsyncIOMotorDatabase, email: str) -> Optional[str]:
     user = await db.users.find_one({"email": email})

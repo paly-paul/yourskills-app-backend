@@ -11,8 +11,10 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: constr(min_length=4)
 
+from typing import Optional, Union
+from pydantic import BaseModel, EmailStr, field_validator
+
 class UserLogin(BaseModel):
-    username: Optional[str] = None
     email: Optional[Union[EmailStr, str]] = None
     password: str
 
@@ -20,12 +22,12 @@ class UserLogin(BaseModel):
     @classmethod
     def empty_string_to_none(cls, v):
         return v or None
-
-    @model_validator(mode="after")
-    def check_identifier(cls, values):
-        if not values.username and not values.email:
-            raise ValueError("Either username or email must be provided")
+    @classmethod
+    def model_validate(cls, values):
+        if not values.get("email"):
+            raise ValueError("Email must be provided")
         return values
+
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
