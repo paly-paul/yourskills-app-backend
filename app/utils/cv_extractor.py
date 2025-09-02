@@ -365,6 +365,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
     for q in questions_from_db:
         parameter = q.get("parameter", "")
         question_text = q.get("question")
+        type = q.get("type")
         iconfilename = q.get("iconfilename")
 
         parameter_list = [p.strip() for p in parameter.split("+")]
@@ -411,6 +412,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             results.append({
                 "parameters": parameter_list,
                 "question": question_text,
+                "type":type,
                 "iconfilename": iconfilename,
                 "options": formatted_options
             })
@@ -419,6 +421,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             results.append({
                 "parameters": parameter_list,
                 "question": question_text,
+                "type":type,
                 "iconfilename": iconfilename,
                 "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
             })

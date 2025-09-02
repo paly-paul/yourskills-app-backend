@@ -261,11 +261,12 @@ async def get_latest_cv_details(
     current_user: dict = Depends(get_current_user)
 ):
     uploads_collection = db["uploads"]
+    answers_collection = db["answers"]
 
     user_id = str(current_user.get("_id"))
 
+    # Fetch latest CV document
     query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
-
     cv_doc = await uploads_collection.find_one(
         query,
         sort=[("uploaded_at", DESCENDING)]
@@ -275,10 +276,9 @@ async def get_latest_cv_details(
         raise HTTPException(status_code=404, detail="No CV uploaded yet")
 
     parsed_data = cv_doc.get("parsed_data", {}) or {}
-
-
     work_experiences = parsed_data.get("WorkExperience", []) or []
 
+    # Helper: Parse duration to find latest role
     def parse_duration(duration_str: str):
         import re
         from dateutil import parser as date_parser
@@ -296,6 +296,7 @@ async def get_latest_cv_details(
         except Exception:
             return None
 
+    # Extract latest job role
     job_role = None
     latest_end = datetime.min
     for job in work_experiences:
@@ -306,10 +307,10 @@ async def get_latest_cv_details(
                 latest_end = end
                 job_role = job.get("Role")
 
-  
+    # Base formatted data
     formatted_data = {
         "name": parsed_data.get("Name"),
-        "role": job_role or parsed_data.get("Role") or parsed_data.get("Title"),
+        "role": job_role ,
         "summary": parsed_data.get("Summary") or "",
         "hard_skills": parsed_data.get("Skills", {}).get("HardSkills", []),
         "soft_skills": parsed_data.get("Skills", {}).get("SoftSkills", []),
@@ -317,10 +318,48 @@ async def get_latest_cv_details(
         "education": parsed_data.get("Education", []),
         "career_overview": parsed_data.get("YearsOfExperience"),
         "certifications": parsed_data.get("Certifications", [])
-        
     }
 
+    # Helper: Fetch missing answers
+    async def fetch_answer(parameter: str, section="Cv Missing"):
+        ans_doc = await answers_collection.find_one(
+            {
+                "user_id": user_id,
+                "cv_id": str(cv_doc.get("_id")),
+                "section": section,
+                "parameter": parameter
+            },
+            sort=[("created_at", DESCENDING)]
+        )
+        if ans_doc:
+            return ans_doc.get("selected_options") or ans_doc.get("free_text")
+        return None
+
+    # Fill missing fields from answers
+    if not formatted_data["certifications"]:
+        formatted_data["certifications"] = await fetch_answer("Certifications")
+
+    if not formatted_data["hard_skills"]:
+        formatted_data["hard_skills"] = await fetch_answer("Technical Skills")
+
+    if not formatted_data["soft_skills"]:
+        formatted_data["soft_skills"] = await fetch_answer("Soft Skills")
+
+    if not formatted_data["tools"]:
+        formatted_data["tools"] = await fetch_answer("Hot Technologies", section="Job Attributes")
+
+    if not formatted_data["role"]:
+        formatted_data["role"] = await fetch_answer("Experience")
+
+    if not formatted_data["education"]:
+        formatted_data["education"] = await fetch_answer("Education")
+
+    if not formatted_data["Summary"]:
+        formatted_data["Summary"] = await fetch_answer("Career Objective")
+
+
     return {"success": True, "cv_details": formatted_data}
+
 
 
 
