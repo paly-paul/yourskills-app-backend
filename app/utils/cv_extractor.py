@@ -486,6 +486,7 @@ async def generate_anchor_attribute_options(cv_id, questions):
             continue  # skip non-target parameters
 
         question_text = q.get("question")
+        type = q.get("type")
         iconfilename = q.get("iconfilename")
 
         # Split parameter string into sub-parameters
@@ -531,6 +532,7 @@ async def generate_anchor_attribute_options(cv_id, questions):
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
+                "type": type,
                 "iconfilename": iconfilename,
                 "options": formatted
             })
@@ -540,6 +542,7 @@ async def generate_anchor_attribute_options(cv_id, questions):
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
+                "type": type,
                 "iconfilename": iconfilename,
                 "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
             })
