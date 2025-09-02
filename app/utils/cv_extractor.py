@@ -9,6 +9,7 @@ from docx import Document
 import re
 from typing import Dict, List, Tuple
 from collections import defaultdict
+from app.db.database import get_database
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -433,59 +434,93 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
 
 
-async def generate_anchor_attribute_options(parsed_data, questions):
+async def generate_anchor_attribute_options(cv_id, questions):
     """
-    Generate multiple-choice options for specific Anchor parameters.
-    Each parameter contributes 5 options.
-    If parameter string has multiple (joined with '+'), total = 5 × number_of_parameters.
-    Returns { "suggestions": [ {parameters, question, iconfilename, options} ] }
+    Generate multiple-choice options for Anchor attributes.
+
+    Base parameters (source of free-text answers):
+      - "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities"
+      - "Achievements"
+
+    Target parameters (for which options are generated):
+      - "Creative Inclinations + Organizational Skills + Competency + Personality Traits"
+      - "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+
+    Rules:
+      - 5 options per sub-parameter (e.g., 4 sub-parameters = 20 options total).
+      - Options must be short (2–5 words).
+      - Options must come ONLY from free-text (rephrased, split, or summarized).
+      - Strict JSON response expected from LLM.
     """
+
+    # Define base & target parameters
+    base_parameters = {
+        "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "Achievements"
+    }
     target_parameters = {
         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
     }
 
-    context_str = "\n".join(f"{k}: {v}" for k, v in parsed_data.items() if v)
+    # Get DB collection
+    db = await get_database()
+    answers_col = db["answers"]
+
+    # Fetch free-text answers from base parameters
+    base_answers = await answers_col.find(
+        {"cv_id": cv_id, "parameter": {"$in": list(base_parameters)}},
+        {"parameter": 1, "free_text": 1, "_id": 0}
+    ).to_list(length=None)
+
+    # Map {parameter: free_text}
+    base_free_text_map = {ans["parameter"]: ans.get("free_text", "") for ans in base_answers}
+    base_context_str = "\n".join(f"{p}: {t}" for p, t in base_free_text_map.items() if t)
 
     suggestions = []
 
+    # Loop through only the target questions
     for q in questions:
         parameter = q.get("parameter")
         if parameter not in target_parameters:
-            continue
+            continue  # skip non-target parameters
 
         question_text = q.get("question")
-        type = q.get("type")
         iconfilename = q.get("iconfilename")
 
+        # Split parameter string into sub-parameters
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 5 * len(parameter_list)
-
         labels = [chr(65 + i) for i in range(option_count)]
 
+        # Prompt for LLM
         prompt = (
-            "You are an AI assistant generating career-related multiple-choice options.\n\n"
-            f"CV Context:\n{context_str}\n\n"
+            "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
+            f"STRICT KNOWLEDGE BASE (do not go outside this):\n{base_context_str}\n\n"
             f"Question: {question_text}\n\n"
+            "Instructions:\n"
+            f"- Generate EXACTLY {option_count} options.\n"
+            f"- Each option must begin with {', '.join(labels)}.\n"
+            "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers above.\n"
+            "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
+            "- Keep each option SHORT (2–5 words).\n"
+            "- Ensure all options are distinct and meaningful.\n\n"
             "Respond ONLY in JSON format:\n"
             "{\n"
             "  \"options\": [\n"
             + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
             "\n  ]\n"
-            "}\n\n"
-            "RULES:\n"
-            f"- Always provide EXACTLY {option_count} options.\n"
-            f"- Each option must begin with {', '.join(labels)}.\n"
-            "- Keep options SHORT (2–5 words, no full sentences).\n"
-            "- Options must be distinct and meaningful."
+            "}"
         )
 
         try:
+            # Call LLM
             response = await model.generate_content_async(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
+            # Ensure options are correctly formatted
             formatted = []
             for i in range(option_count):
                 opt = options[i].strip() if i < len(options) else f"Option {i+1}"
@@ -494,20 +529,19 @@ async def generate_anchor_attribute_options(parsed_data, questions):
                 formatted.append(opt)
 
             suggestions.append({
-                "parameters": parameter_list,   
+                "parameters": parameter_list,
                 "question": question_text,
-                "type": type,
                 "iconfilename": iconfilename,
                 "options": formatted
             })
+
         except Exception:
+            # Fallback in case of LLM/JSON error
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
-                "type": type,
                 "iconfilename": iconfilename,
                 "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
             })
 
     return {"suggestions": suggestions}
-
