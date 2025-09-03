@@ -83,7 +83,7 @@ class AnswerModel(BaseModel):
     id: str = Field(default_factory=generate_uuid, alias="_id")
     user_id: str
     tenant_id: str
-    cv_id: str                          # link answers to a specific uploaded CV
+    cv_id: str                          
     section: str                        
     parameter: str                      
     answer_type: str                    

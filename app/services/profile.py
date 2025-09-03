@@ -200,7 +200,6 @@ async def get_audience_questions_service(db, current_user):
     if not latest_cv or "parsed_data" not in latest_cv:
         raise HTTPException(status_code=404, detail="No CV data found for this user")
 
-    # 🔹 directly get audienceType + job_questions_with_options from uploads collection
     audience_type = latest_cv.get("audienceType")
     job_questions_with_options = latest_cv.get("job_questions_with_options", [])
 
@@ -231,7 +230,6 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
-    # 1. Get latest CV upload
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"])},
         sort=[("_id", -1)]
@@ -241,10 +239,8 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
 
     parsed_data = latest_cv["parsed_data"]
 
-    # 2. Predict audience type
     audience_type = predict_audience_type(parsed_data)
 
-    # 3. Fetch questions collection
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -262,13 +258,11 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
 
     results = []
 
-    # 4. Special parameters (must come from uploads)
     special_params = [
         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
     ]
 
-    # 5. Add from uploads (anchor_questions_with_options)
     upload_questions = latest_cv.get("anchor_questions_with_options", [])
     for uq in upload_questions:
         param = normalize_parameter(uq.get("parameters"))
@@ -282,10 +276,9 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
                 "source": "uploads"
             })
 
-    # 6. Add from questions collection (skip already added special ones)
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
-        if param not in [r["parameter"] for r in results]:  # avoid duplicates
+        if param not in [r["parameter"] for r in results]: 
             results.append({
                 "parameter": param,
                 "question": cq.get("question"),

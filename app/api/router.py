@@ -96,6 +96,8 @@ async def extract_cv(
     current_user=Depends(get_current_user)
 ):
     import tempfile
+    import re
+    from datetime import datetime
     from app.utils.cv_extractor import (
         extract_cv_data_from_file,
         generate_missing_field_suggestions,
@@ -120,7 +122,7 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    # ---- suggestions if skills missing ----
+
     softskills_suggestions, technical_skills_suggestions = [], []
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
@@ -139,13 +141,13 @@ async def extract_cv(
         db=db
     )
 
-    # ---- audience & job/anchor questions ----
+
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
 
     job_questions_with_options = []
-    anchor_questions_with_options = []  
+    anchor_questions_with_options = []
 
     if questions_doc:
         job_attributes = questions_doc.get("Job attributes", [])
@@ -177,7 +179,6 @@ async def extract_cv(
     summary = await get_cv_summary(data)
 
     def parse_duration(duration_str: str):
-        import re
         from dateutil import parser as date_parser
         try:
             parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
@@ -202,6 +203,16 @@ async def extract_cv(
             if end > latest_end:
                 latest_end = end
                 job_role = job.get("Role")
+
+    if not job_role and data.get("WorkExperience"):
+        raw_role = data["WorkExperience"][0].get("Role", "")
+        if raw_role:
+            job_role = raw_role.split("/")[0].split(",")[0].strip()
+
+    if not job_role and data.get("Summary"):
+        match = re.search(r"(?i)([A-Z][a-zA-Z\s\/\-]+)\s+with\s+\d+\s+years", data["Summary"])
+        if match:
+            job_role = match.group(1).strip()
 
     known_fields = len(summary.get("known", []))
     unknown_fields = len(summary.get("unknown", []))
@@ -302,7 +313,6 @@ async def get_latest_cv_details(
 
     user_id = str(current_user.get("_id"))
 
-    # Fetch latest CV document
     query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
     cv_doc = await uploads_collection.find_one(
         query,
@@ -315,7 +325,6 @@ async def get_latest_cv_details(
     parsed_data = cv_doc.get("parsed_data", {}) or {}
     work_experiences = parsed_data.get("WorkExperience", []) or []
 
-    # Helper: Parse duration to find latest role
     def parse_duration(duration_str: str):
         import re
         from dateutil import parser as date_parser
@@ -333,22 +342,27 @@ async def get_latest_cv_details(
         except Exception:
             return None
 
-    # Extract latest job role
     job_role = None
     latest_end = datetime.min
-    for job in work_experiences:
-        parsed = parse_duration(job.get("Duration", ""))
-        if parsed:
-            _, end = parsed
-            if end > latest_end:
-                latest_end = end
-                job_role = job.get("Role")
 
-    # Base formatted data
+    
+    if parsed_data.get("YearsOfExperience", 0) == 0:
+    
+        job_role = "Fresher"
+    else:
+        for job in work_experiences:
+            parsed = parse_duration(job.get("Duration", ""))
+            if parsed:
+                _, end = parsed
+                if end > latest_end:
+                    latest_end = end
+                    job_role = job.get("Role")
+
+
     formatted_data = {
         "name": parsed_data.get("Name"),
-        "role": job_role ,
-        "summary": parsed_data.get("Summary") or "",
+        "role": parsed_data.get("JobRole"),
+        "Summary": parsed_data.get("Summary") or "",
         "hard_skills": parsed_data.get("Skills", {}).get("HardSkills", []),
         "soft_skills": parsed_data.get("Skills", {}).get("SoftSkills", []),
         "tools": parsed_data.get("Skills", {}).get("Tools", []),
@@ -357,7 +371,6 @@ async def get_latest_cv_details(
         "certifications": parsed_data.get("Certifications", [])
     }
 
-    # Helper: Fetch missing answers
     async def fetch_answer(parameter: str, section="Cv Missing"):
         ans_doc = await answers_collection.find_one(
             {
@@ -372,7 +385,6 @@ async def get_latest_cv_details(
             return ans_doc.get("selected_options") or ans_doc.get("free_text")
         return None
 
-    # Fill missing fields from answers
     if not formatted_data["certifications"]:
         formatted_data["certifications"] = await fetch_answer("Certifications")
 

@@ -133,7 +133,7 @@
     {
       "parameter": "Certifications",
       "questionText": "Have you done any certifications, courses, or attended workshops recently?",
-      "type": "Multiple select + Text entry",
+      "type": "Short text + Edit view",
       "iconFileName": "certifications"
     },
     {

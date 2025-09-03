@@ -100,13 +100,11 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
     """
     user_id = current_user.get("id") or current_user.get("_id")
 
-    # make sure it's ObjectId
     try:
         user_id = ObjectId(str(user_id))
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    # 1. Find the latest CV uploaded by the user
     latest_cv = await db["uploads"].find_one(
         {"user_id": user_id},
         sort=[("uploaded_at", -1)]
@@ -133,7 +131,6 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
             ).dict(by_alias=True)
         )
 
-    # 3. Insert into Mongo
     if answer_docs:
         await db["answers"].insert_many(answer_docs)
 

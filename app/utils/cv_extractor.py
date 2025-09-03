@@ -45,6 +45,19 @@ def parse_duration(duration_str):
     except Exception as e:
         print("Duration parsing error:", str(e))
         return None
+def extract_years_from_summary(summary_text: str) -> float:
+    """
+    Extract years of experience directly from the Summary section
+    if WorkExperience durations are missing.
+    """
+    if not summary_text:
+        return 0.0
+
+    match = re.search(r"(?i)(over|more than|about)?\s*(\d+)\s*(\+)?\s*years? of experience", summary_text)
+    if match:
+        return float(match.group(2))
+    return 0.0
+
 
 
 def calculate_years_of_experience(work_experiences):
@@ -79,6 +92,22 @@ def extract_docx_text(filepath):
                 if cell_text:
                     texts.append(cell_text)
     return "\n".join(texts)
+def extract_job_role(parsed_json):
+
+    work_exps = parsed_json.get("WorkExperience", [])
+    if work_exps and work_exps[0].get("Role"):
+        role = work_exps[0]["Role"]
+
+        return role.split("/")[0].split(",")[0].strip()
+
+    summary = parsed_json.get("Summary", "")
+    if summary:
+        match = re.search(r"(?i)([A-Z][a-zA-Z\s\/\-]+)\s+with\s+\d+\s+years", summary)
+        if match:
+            role = match.group(1).strip()
+            return role.split("/")[0].split(",")[0].strip()
+
+    return None
 
 
 def extract_cv_data_from_file(filepath: str, mime_type: str):
@@ -164,10 +193,21 @@ Instructions:
 1. Extract data only if explicitly mentioned in the CV text.
 2. Do NOT infer, guess, or summarize missing values.
 3. For Skills and Tools: extract explicitly mentioned items and categorize into HardSkills, SoftSkills, Tools.
-4. For YearsOfExperience, calculate based on WorkExperience dates only.
-5. Return only valid JSON. Start with { and end with }.
+4. For WorkExperience:
+   - If an Experience section exists, extract normally.
+   - If Duration is missing, scan Summary and Projects for Role and Years of Experience.
+   - If no Experience section exists, analyze Summary and Projects for any mention of experience (e.g., years, roles, domains) and use that to populate WorkExperience.
+   - If Summary explicitly mentions roles (e.g., "Project Manager", "Senior Developer"), include them in WorkExperience even if no company is listed.
+5. For YearsOfExperience:
+   - First, calculate based only on explicitly mentioned WorkExperience dates or durations.
+   - If none are found, extract directly from Summary using explicit mentions like:
+       - "X years of experience"
+       - "over X years"
+       - "more than X years"
+     (Example regex pattern: (?i)(over|more than|about)?\s*(\d+)\s*(\+)?\s*years? of experience)
+   - Use that number to populate YearsOfExperience.
+6. Return only valid JSON. Start with { and end with }.
 """
-
     try:
         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             file_text = extract_docx_text(filepath)
@@ -196,13 +236,22 @@ Instructions:
         parsed_json = clean_json(parsed_json)
 
         work_exp = parsed_json.get("WorkExperience", [])
-        parsed_json["YearsOfExperience"] = calculate_years_of_experience(work_exp)
+        years_from_work = calculate_years_of_experience(work_exp)
+
+        if years_from_work > 0:
+            parsed_json["YearsOfExperience"] = years_from_work
+        else:
+            parsed_json["YearsOfExperience"] = extract_years_from_summary(parsed_json.get("Summary", ""))
+
+        
+        parsed_json["JobRole"] = extract_job_role(parsed_json)
 
         return parsed_json
 
     except Exception as e:
         print("CV Extraction Error:", str(e))
         return {"error": "Failed to parse CV data"}
+
 
 
 def predict_audience_type(parsed_data: Dict) -> str:
@@ -453,7 +502,6 @@ async def generate_anchor_attribute_options(cv_id, questions):
       - Strict JSON response expected from LLM.
     """
 
-    # Define base & target parameters
     base_parameters = {
         "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
         "Achievements"
@@ -463,38 +511,31 @@ async def generate_anchor_attribute_options(cv_id, questions):
         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
     }
 
-    # Get DB collection
     db = await get_database()
     answers_col = db["answers"]
-
-    # Fetch free-text answers from base parameters
     base_answers = await answers_col.find(
         {"cv_id": cv_id, "parameter": {"$in": list(base_parameters)}},
         {"parameter": 1, "free_text": 1, "_id": 0}
     ).to_list(length=None)
 
-    # Map {parameter: free_text}
     base_free_text_map = {ans["parameter"]: ans.get("free_text", "") for ans in base_answers}
     base_context_str = "\n".join(f"{p}: {t}" for p, t in base_free_text_map.items() if t)
 
     suggestions = []
 
-    # Loop through only the target questions
     for q in questions:
         parameter = q.get("parameter")
         if parameter not in target_parameters:
-            continue  # skip non-target parameters
+            continue  
 
         question_text = q.get("question")
         type = q.get("type")
         iconfilename = q.get("iconfilename")
 
-        # Split parameter string into sub-parameters
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 5 * len(parameter_list)
         labels = [chr(65 + i) for i in range(option_count)]
 
-        # Prompt for LLM
         prompt = (
             "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
             f"STRICT KNOWLEDGE BASE (do not go outside this):\n{base_context_str}\n\n"
@@ -515,13 +556,11 @@ async def generate_anchor_attribute_options(cv_id, questions):
         )
 
         try:
-            # Call LLM
             response = await model.generate_content_async(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
-            # Ensure options are correctly formatted
             formatted = []
             for i in range(option_count):
                 opt = options[i].strip() if i < len(options) else f"Option {i+1}"
@@ -538,7 +577,6 @@ async def generate_anchor_attribute_options(cv_id, questions):
             })
 
         except Exception:
-            # Fallback in case of LLM/JSON error
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
