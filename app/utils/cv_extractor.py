@@ -10,6 +10,10 @@ import re
 from typing import Dict, List, Tuple
 from collections import defaultdict
 from app.db.database import get_database
+import random
+import json
+import uuid
+from datetime import datetime
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -500,8 +504,10 @@ async def generate_anchor_attribute_options(cv_id, questions):
       - Options must be short (2–5 words).
       - Options must come ONLY from free-text (rephrased, split, or summarized).
       - Strict JSON response expected from LLM.
+      - Must generate new variations every execution, even with same cv_id.
     """
 
+    # Define base & target parameters
     base_parameters = {
         "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
         "Achievements"
@@ -511,42 +517,82 @@ async def generate_anchor_attribute_options(cv_id, questions):
         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
     }
 
+    # Get DB collection
     db = await get_database()
     answers_col = db["answers"]
+
+    # Fetch free-text answers from base parameters
     base_answers = await answers_col.find(
         {"cv_id": cv_id, "parameter": {"$in": list(base_parameters)}},
         {"parameter": 1, "free_text": 1, "_id": 0}
     ).to_list(length=None)
 
+    # Map {parameter: free_text}
     base_free_text_map = {ans["parameter"]: ans.get("free_text", "") for ans in base_answers}
-    base_context_str = "\n".join(f"{p}: {t}" for p, t in base_free_text_map.items() if t)
 
     suggestions = []
 
+    # Random variation seed (UUID + timestamp to guarantee uniqueness each run)
+    variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
+
+    # Extra random "style noise" injected into prompt to enforce variety
+    style_noise_pool = [
+        "use uncommon synonyms",
+        "reorder ideas differently",
+        "make phrasing more concise",
+        "add creative wording twists",
+        "slightly formal tone",
+        "slightly casual tone",
+        "shuffle activity order",
+        "split compound ideas differently"
+    ]
+    random.shuffle(style_noise_pool)
+    style_noise = ", ".join(style_noise_pool[:3])  # pick 3 random noise rules
+
+    # Loop through only the target questions
     for q in questions:
         parameter = q.get("parameter")
         if parameter not in target_parameters:
-            continue  
+            continue  # skip non-target parameters
 
         question_text = q.get("question")
-        type = q.get("type")
+        type_ = q.get("type")
         iconfilename = q.get("iconfilename")
 
+        # Split parameter string into sub-parameters
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 5 * len(parameter_list)
         labels = [chr(65 + i) for i in range(option_count)]
 
+        # Build context from base free text, shuffle for variety
+        non_empty_texts = [t for t in base_free_text_map.values() if t]
+        random.shuffle(non_empty_texts)
+        context_sample = "\n".join(non_empty_texts[:2])  # take top 2 for relevance
+
+        # Stronger variation enforcement
+        variation_instructions = (
+            "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
+            "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
+            "- Introduce synonyms, shuffle word order, or shorten differently.\n"
+            "- Do NOT reuse exact same option wording as before.\n"
+            f"- Apply these random variation rules: {style_noise}\n"
+        )
+
+        # Prompt for LLM
         prompt = (
             "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
-            f"STRICT KNOWLEDGE BASE (do not go outside this):\n{base_context_str}\n\n"
+            f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
+            f"Target sub-parameters: {', '.join(parameter_list)}\n"
             f"Question: {question_text}\n\n"
             "Instructions:\n"
             f"- Generate EXACTLY {option_count} options.\n"
             f"- Each option must begin with {', '.join(labels)}.\n"
-            "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers above.\n"
+            "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers.\n"
             "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
             "- Keep each option SHORT (2–5 words).\n"
-            "- Ensure all options are distinct and meaningful.\n\n"
+            "- Ensure all options are distinct and meaningful.\n"
+            f"{variation_instructions}"
+            f"- Variation key (for uniqueness): {variation_key}\n\n"
             "Respond ONLY in JSON format:\n"
             "{\n"
             "  \"options\": [\n"
@@ -556,11 +602,13 @@ async def generate_anchor_attribute_options(cv_id, questions):
         )
 
         try:
+            # Call LLM (if your model API supports temperature, pass e.g. temperature=0.9 for more variation)
             response = await model.generate_content_async(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
+            # Ensure options are correctly formatted
             formatted = []
             for i in range(option_count):
                 opt = options[i].strip() if i < len(options) else f"Option {i+1}"
@@ -571,18 +619,20 @@ async def generate_anchor_attribute_options(cv_id, questions):
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
-                "type": type,
+                "type": type_,
                 "iconfilename": iconfilename,
                 "options": formatted
             })
 
-        except Exception:
+        except Exception as e:
+            # Fallback in case of LLM/JSON error
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
-                "type": type,
+                "type": type_,
                 "iconfilename": iconfilename,
-                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
+                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
+                "error": str(e)
             })
 
     return {"suggestions": suggestions}

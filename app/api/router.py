@@ -254,12 +254,58 @@ async def get_audience_questions(
 ):
     return await get_audience_questions_service(db, current_user)
 
-@router.get("/anchor-questions")
-async def get_anchor_questions(
+@router.get("/anchor-questions/parameters")
+async def get_anchor_questions_by_parameters(
     db=Depends(get_database),
     current_user=Depends(get_current_user)
 ):
-    return await get_questions_by_audience(db, current_user, "Anchor attributes")
+    """
+    Fetch specific Anchor Attribute questions for:
+      - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
+      - Achievements
+    """
+    return await get_questions_by_parameters(
+        db, current_user,
+        "Anchor attributes",
+        [
+            "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+            "Achievements"
+        ]
+    )
+
+@router.get("/anchor-questions/remaining")
+async def get_remaining_anchor_questions(
+    db=Depends(get_database),
+    current_user=Depends(get_current_user)
+):
+    """Fetch anchor attribute questions excluding 'Personal Interests...' and 'Achievements'."""
+
+    exclude_params = [
+        "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "Achievements"
+    ]
+
+    # Get all anchor attribute questions first
+    all_questions_response = await get_questions_by_audience(db, current_user, "Anchor attributes")
+
+    # Filter out excluded parameters
+    remaining_questions = [
+        q for q in all_questions_response["questions"]
+        if q["parameter"] not in exclude_params
+    ]
+
+    return {
+        "success": True,
+        "audienceType": all_questions_response["audienceType"],
+        "questions": remaining_questions,
+    }
+
+# @router.get("/anchor-questions")
+# async def get_anchor_questions(
+#     db=Depends(get_database),
+#     current_user=Depends(get_current_user)
+# ):
+#     return await get_questions_by_audience(db, current_user, "Anchor attributes")
 
 
 @router.post("/missing_questions/answers")

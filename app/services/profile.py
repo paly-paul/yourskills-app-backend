@@ -293,3 +293,113 @@ async def get_questions_by_audience(db, current_user, attribute_type: str):
         "audienceType": audience_type,
         "questions": results,
     }
+
+
+async def get_questions_by_parameters(db, current_user, attribute_type: str, parameters: list):
+    """Fetch specific questions from anchor attributes based on parameters & audience type."""
+    uploads_collection = db["uploads"]
+    questions_collection = db["questions"]
+
+    # 1. Get latest CV upload
+    latest_cv = await uploads_collection.find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    parsed_data = latest_cv["parsed_data"]
+
+    # 2. Predict audience type
+    audience_type = predict_audience_type(parsed_data)
+
+    # 3. Fetch questions collection
+    questions_doc = await questions_collection.find_one({})
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail="No questions collection found")
+
+    attributes = questions_doc.get(attribute_type, [])
+    matching_entry = next(
+        (item for item in attributes if item.get("audienceType") == audience_type),
+        None
+    )
+    if not matching_entry:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
+        )
+
+    # 4. Filter questions by requested parameters
+    results = []
+    for cq in matching_entry.get("questions", []):
+        param = normalize_parameter(cq.get("parameter"))
+        if param in parameters:
+            results.append({
+                "parameter": param,
+                "question": cq.get("question"),
+                "type": cq.get("type"),
+                "options": cq.get("options", []),
+                "iconfilename": cq.get("iconfilename"),
+                "source": "questions_collection"
+            })
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": results,
+    }
+
+async def get_questions_excluding_parameters(db, current_user, attribute_type: str, exclude_params: list):
+    """Fetch questions excluding given parameters based on audience type."""
+    uploads_collection = db["uploads"]
+    questions_collection = db["questions"]
+
+    # 1. Get latest CV upload
+    latest_cv = await uploads_collection.find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    parsed_data = latest_cv["parsed_data"]
+
+    # 2. Predict audience type
+    audience_type = predict_audience_type(parsed_data)
+
+    # 3. Fetch questions collection
+    questions_doc = await questions_collection.find_one({})
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail="No questions collection found")
+
+    attributes = questions_doc.get(attribute_type, [])
+    matching_entry = next(
+        (item for item in attributes if item.get("audienceType") == audience_type),
+        None
+    )
+    if not matching_entry:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
+        )
+
+    results = []
+
+    # 4. Collect questions excluding given params
+    for cq in matching_entry.get("questions", []):
+        param = normalize_parameter(cq.get("parameter"))
+        if param not in exclude_params:
+            results.append({
+                "parameter": param,
+                "question": cq.get("question"),
+                "type": cq.get("type"),
+                "options": cq.get("options", []),
+                "iconfilename": cq.get("iconfilename"),
+                "source": "questions_collection"
+            })
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": results,
+    }
