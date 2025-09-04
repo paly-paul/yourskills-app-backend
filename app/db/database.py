@@ -66,3 +66,7 @@ async def close_mongo_connection():
 async def get_database():
     """Dependency that provides a MongoDB database instance."""
     return db
+
+
+
+

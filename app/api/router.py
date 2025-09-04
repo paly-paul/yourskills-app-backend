@@ -19,8 +19,23 @@ from app.services.skill_suggestions import save_skill_suggestions
 from app.services.profile import (
     get_missing_field_questions_service,
     get_audience_questions_service,
-    get_questions_by_audience
+    get_questions_excluding_parameters, get_questions_by_parameters
 )
+
+# models.py (or services/llm.py)
+import os
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+# create a single instance of your model
+gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+
+def get_llm_model():
+    return gemini_model
+
 
 router = APIRouter()
 
@@ -102,8 +117,7 @@ async def extract_cv(
         extract_cv_data_from_file,
         generate_missing_field_suggestions,
         predict_audience_type,
-        generate_job_attribute_options,
-        generate_anchor_attribute_options
+        generate_job_attribute_options
     )
 
     with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
@@ -122,7 +136,7 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-
+    # ---- Generate missing skill suggestions if needed ----
     softskills_suggestions, technical_skills_suggestions = [], []
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
@@ -141,13 +155,12 @@ async def extract_cv(
         db=db
     )
 
-
+    # ---- Generate only Job Attribute options ----
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
 
     job_questions_with_options = []
-    anchor_questions_with_options = []
 
     if questions_doc:
         job_attributes = questions_doc.get("Job attributes", [])
@@ -158,21 +171,13 @@ async def extract_cv(
             job_options = await generate_job_attribute_options(data, job_questions)
             job_questions_with_options = job_options["suggestions"]
 
-        anchor_attributes = questions_doc.get("Anchor attributes", [])
-        matching_anchor = next((item for item in anchor_attributes if item.get("audienceType") == audience_type), None)
-
-        if matching_anchor:
-            anchor_questions = matching_anchor.get("questions", [])
-            anchor_options = await generate_anchor_attribute_options(data, anchor_questions)
-            anchor_questions_with_options = anchor_options["suggestions"]
-
         uploads_collection = db["uploads"]
         await uploads_collection.update_one(
             {"_id": saved_cv["_id"]},
             {"$set": {
                 "audienceType": audience_type,
-                "job_questions_with_options": job_questions_with_options,
-                "anchor_questions_with_options": anchor_questions_with_options
+                "job_questions_with_options": job_questions_with_options
+                
             }}
         )
 
@@ -233,9 +238,7 @@ async def extract_cv(
 
 
 
-# @router.get("/profile/summary")
-# async def get_my_profile_summary(db=Depends(get_database), current_user=Depends(get_current_user)):
-#     return await get_profile_summary_service(db, current_user)
+
 
 
 @router.get("/missing_questions")
@@ -276,36 +279,25 @@ async def get_anchor_questions_by_parameters(
 @router.get("/anchor-questions/remaining")
 async def get_remaining_anchor_questions(
     db=Depends(get_database),
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    model=Depends(get_llm_model)  
 ):
-    """Fetch anchor attribute questions excluding 'Personal Interests...' and 'Achievements'."""
-
+    """Fetch anchor attribute questions excluding base params,
+    generating and merging options if needed.
+    """
     exclude_params = [
         "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
         "Achievements"
     ]
 
-    # Get all anchor attribute questions first
-    all_questions_response = await get_questions_by_audience(db, current_user, "Anchor attributes")
-
-    # Filter out excluded parameters
-    remaining_questions = [
-        q for q in all_questions_response["questions"]
-        if q["parameter"] not in exclude_params
-    ]
-
-    return {
-        "success": True,
-        "audienceType": all_questions_response["audienceType"],
-        "questions": remaining_questions,
-    }
-
-# @router.get("/anchor-questions")
-# async def get_anchor_questions(
-#     db=Depends(get_database),
-#     current_user=Depends(get_current_user)
-# ):
-#     return await get_questions_by_audience(db, current_user, "Anchor attributes")
+    return await get_questions_excluding_parameters(
+        db=db,
+        current_user=current_user,
+        attribute_type="Anchor attributes",
+        exclude_params=exclude_params,
+        model=model,
+        get_database=get_database
+    )
 
 
 @router.post("/missing_questions/answers")
@@ -348,6 +340,8 @@ async def submit_anchor_attr_answers(
         section="Anchor Attributes",
         answers=payload["answers"]
     )
+
+
 
 @router.get("/cv/latest/details")
 async def get_latest_cv_details(

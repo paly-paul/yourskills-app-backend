@@ -14,6 +14,8 @@ import random
 import json
 import uuid
 from datetime import datetime
+from fastapi import HTTPException
+from bson import ObjectId
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -487,55 +489,80 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
 
 
-async def generate_anchor_attribute_options(cv_id, questions):
-    """
-    Generate multiple-choice options for Anchor attributes.
+def clean_llm_json_response(text: str) -> str:
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1:
+        return text
+    return text[start:end+1]
 
-    Base parameters (source of free-text answers):
-      - "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities"
-      - "Achievements"
 
-    Target parameters (for which options are generated):
-      - "Creative Inclinations + Organizational Skills + Competency + Personality Traits"
-      - "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+# ---- fetch latest free-text answers ----
+async def fetch_latest_anchor_answers(db, cv_id: str) -> dict:
+    answers_col = db["answers"]
 
-    Rules:
-      - 5 options per sub-parameter (e.g., 4 sub-parameters = 20 options total).
-      - Options must be short (2–5 words).
-      - Options must come ONLY from free-text (rephrased, split, or summarized).
-      - Strict JSON response expected from LLM.
-      - Must generate new variations every execution, even with same cv_id.
-    """
-
-    # Define base & target parameters
-    base_parameters = {
+    base_parameters = [
         "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
         "Achievements"
-    }
+    ]
+
+    cursor = answers_col.find(
+        {"cv_id": cv_id, "parameter": {"$in": base_parameters}},
+        {"parameter": 1, "free_text": 1, "created_at": 1, "_id": 0}
+    ).sort("created_at", -1)
+
+    results = await cursor.to_list(length=None)
+
+    latest_answers = {}
+    for ans in results:
+        param = ans["parameter"]
+        if param not in latest_answers:  # newest first wins
+            latest_answers[param] = ans.get("free_text", "")
+
+    return latest_answers
+
+
+
+
+async def get_latest_user_cv(db, user_id: str):
+    """
+    Fetch the most recent uploaded CV for a logged-in user.
+    """
+    latest_cv = await db["uploads"].find_one(
+        {"user_id": ObjectId(user_id), "source": "cv"},
+        sort=[("uploaded_at", -1)]
+    )
+    return latest_cv
+
+
+async def generate_anchor_attribute_options(user_id: str, questions, model, get_database):
+    """
+    Generate multiple-choice options for Anchor attributes based on free-text answers
+    and save them into uploads collection under the latest CV document of the logged-in user.
+    """
+
     target_parameters = {
         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
     }
 
-    # Get DB collection
     db = await get_database()
-    answers_col = db["answers"]
 
-    # Fetch free-text answers from base parameters
-    base_answers = await answers_col.find(
-        {"cv_id": cv_id, "parameter": {"$in": list(base_parameters)}},
-        {"parameter": 1, "free_text": 1, "_id": 0}
-    ).to_list(length=None)
+    # ✅ Fetch latest uploaded CV for this user
+    latest_cv = await get_latest_user_cv(db, user_id)
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV found for this user")
 
-    # Map {parameter: free_text}
-    base_free_text_map = {ans["parameter"]: ans.get("free_text", "") for ans in base_answers}
+    cv_id = str(latest_cv["_id"])
+
+    # ✅ Fetch free-text anchor answers
+    base_free_text_map = await fetch_latest_anchor_answers(db, cv_id)
+    if not base_free_text_map:
+        raise HTTPException(status_code=404, detail="No base free-text answers found")
 
     suggestions = []
-
-    # Random variation seed (UUID + timestamp to guarantee uniqueness each run)
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
 
-    # Extra random "style noise" injected into prompt to enforce variety
     style_noise_pool = [
         "use uncommon synonyms",
         "reorder ideas differently",
@@ -547,29 +574,25 @@ async def generate_anchor_attribute_options(cv_id, questions):
         "split compound ideas differently"
     ]
     random.shuffle(style_noise_pool)
-    style_noise = ", ".join(style_noise_pool[:3])  # pick 3 random noise rules
+    style_noise = ", ".join(style_noise_pool[:3])
 
-    # Loop through only the target questions
     for q in questions:
         parameter = q.get("parameter")
         if parameter not in target_parameters:
-            continue  # skip non-target parameters
+            continue
 
         question_text = q.get("question")
         type_ = q.get("type")
         iconfilename = q.get("iconfilename")
 
-        # Split parameter string into sub-parameters
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 5 * len(parameter_list)
         labels = [chr(65 + i) for i in range(option_count)]
 
-        # Build context from base free text, shuffle for variety
         non_empty_texts = [t for t in base_free_text_map.values() if t]
         random.shuffle(non_empty_texts)
-        context_sample = "\n".join(non_empty_texts[:2])  # take top 2 for relevance
+        context_sample = "\n".join(non_empty_texts[:2])
 
-        # Stronger variation enforcement
         variation_instructions = (
             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
             "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
@@ -578,7 +601,6 @@ async def generate_anchor_attribute_options(cv_id, questions):
             f"- Apply these random variation rules: {style_noise}\n"
         )
 
-        # Prompt for LLM
         prompt = (
             "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
             f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
@@ -602,13 +624,11 @@ async def generate_anchor_attribute_options(cv_id, questions):
         )
 
         try:
-            # Call LLM (if your model API supports temperature, pass e.g. temperature=0.9 for more variation)
             response = await model.generate_content_async(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
-            # Ensure options are correctly formatted
             formatted = []
             for i in range(option_count):
                 opt = options[i].strip() if i < len(options) else f"Option {i+1}"
@@ -625,7 +645,6 @@ async def generate_anchor_attribute_options(cv_id, questions):
             })
 
         except Exception as e:
-            # Fallback in case of LLM/JSON error
             suggestions.append({
                 "parameters": parameter_list,
                 "question": question_text,
@@ -635,4 +654,11 @@ async def generate_anchor_attribute_options(cv_id, questions):
                 "error": str(e)
             })
 
-    return {"suggestions": suggestions}
+    # ✅ Save back into the latest CV document
+    await db["uploads"].update_one(
+        {"_id": latest_cv["_id"]},
+        {"$set": {"anchor_questions_with_options": suggestions}}
+    )
+
+    return {"success": True, "suggestions": suggestions}
+

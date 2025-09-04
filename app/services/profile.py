@@ -3,7 +3,7 @@ from bson import ObjectId
 from pymongo import DESCENDING
 from datetime import datetime
 from app.utils.cv_extractor import predict_audience_type
-from app.utils.cv_extractor import generate_missing_field_suggestions
+from app.utils.cv_extractor import generate_missing_field_suggestions, generate_anchor_attribute_options
 from app.services.cv_comparison import get_cv_summary
 import json
 
@@ -223,76 +223,76 @@ def normalize_parameter(param):
         return " + ".join(param)
     return param
 
-async def get_questions_by_audience(db, current_user, attribute_type: str):
-    """Fetch questions based on audience type and attribute category (Job/Anchor).
-       Two parameters come from uploads (with options), rest from questions collection.
-    """
-    uploads_collection = db["uploads"]
-    questions_collection = db["questions"]
+# async def get_questions_by_audience(db, current_user, attribute_type: str):
+#     """Fetch questions based on audience type and attribute category (Job/Anchor).
+#        Two parameters come from uploads (with options), rest from questions collection.
+#     """
+#     uploads_collection = db["uploads"]
+#     questions_collection = db["questions"]
 
-    latest_cv = await uploads_collection.find_one(
-        {"user_id": ObjectId(current_user["_id"])},
-        sort=[("_id", -1)]
-    )
-    if not latest_cv or "parsed_data" not in latest_cv:
-        raise HTTPException(status_code=404, detail="No CV data found for this user")
+#     latest_cv = await uploads_collection.find_one(
+#         {"user_id": ObjectId(current_user["_id"])},
+#         sort=[("_id", -1)]
+#     )
+#     if not latest_cv or "parsed_data" not in latest_cv:
+#         raise HTTPException(status_code=404, detail="No CV data found for this user")
 
-    parsed_data = latest_cv["parsed_data"]
+#     parsed_data = latest_cv["parsed_data"]
 
-    audience_type = predict_audience_type(parsed_data)
+#     audience_type = predict_audience_type(parsed_data)
 
-    questions_doc = await questions_collection.find_one({})
-    if not questions_doc:
-        raise HTTPException(status_code=404, detail="No questions collection found")
+#     questions_doc = await questions_collection.find_one({})
+#     if not questions_doc:
+#         raise HTTPException(status_code=404, detail="No questions collection found")
 
-    attributes = questions_doc.get(attribute_type, [])
-    matching_entry = next(
-        (item for item in attributes if item.get("audienceType") == audience_type),
-        None
-    )
-    if not matching_entry:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
-        )
+#     attributes = questions_doc.get(attribute_type, [])
+#     matching_entry = next(
+#         (item for item in attributes if item.get("audienceType") == audience_type),
+#         None
+#     )
+#     if not matching_entry:
+#         raise HTTPException(
+#             status_code=404,
+#             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
+#         )
 
-    results = []
+#     results = []
 
-    special_params = [
-        "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-        "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
-    ]
+#     special_params = [
+#         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+#         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+#     ]
 
-    upload_questions = latest_cv.get("anchor_questions_with_options", [])
-    for uq in upload_questions:
-        param = normalize_parameter(uq.get("parameters"))
-        if param in special_params:
-            results.append({
-                "parameter": param,
-                "question": uq.get("question"),
-                "type": uq.get("type"),
-                "options": uq.get("options", []),
-                "iconfilename": uq.get("iconfilename"),
-                "source": "uploads"
-            })
+#     upload_questions = latest_cv.get("anchor_questions_with_options", [])
+#     for uq in upload_questions:
+#         param = normalize_parameter(uq.get("parameters"))
+#         if param in special_params:
+#             results.append({
+#                 "parameter": param,
+#                 "question": uq.get("question"),
+#                 "type": uq.get("type"),
+#                 "options": uq.get("options", []),
+#                 "iconfilename": uq.get("iconfilename"),
+#                 "source": "uploads"
+#             })
 
-    for cq in matching_entry.get("questions", []):
-        param = normalize_parameter(cq.get("parameter"))
-        if param not in [r["parameter"] for r in results]: 
-            results.append({
-                "parameter": param,
-                "question": cq.get("question"),
-                "type":cq.get("type"),
-                "options": cq.get("options", []),
-                "iconfilename": cq.get("iconfilename"),
-                "source": "questions_collection"
-            })
+#     for cq in matching_entry.get("questions", []):
+#         param = normalize_parameter(cq.get("parameter"))
+#         if param not in [r["parameter"] for r in results]: 
+#             results.append({
+#                 "parameter": param,
+#                 "question": cq.get("question"),
+#                 "type":cq.get("type"),
+#                 "options": cq.get("options", []),
+#                 "iconfilename": cq.get("iconfilename"),
+#                 "source": "questions_collection"
+#             })
 
-    return {
-        "success": True,
-        "audienceType": audience_type,
-        "questions": results,
-    }
+#     return {
+#         "success": True,
+#         "audienceType": audience_type,
+#         "questions": results,
+#     }
 
 
 async def get_questions_by_parameters(db, current_user, attribute_type: str, parameters: list):
@@ -310,10 +310,8 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
 
     parsed_data = latest_cv["parsed_data"]
 
-    # 2. Predict audience type
     audience_type = predict_audience_type(parsed_data)
 
-    # 3. Fetch questions collection
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -329,7 +327,7 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
 
-    # 4. Filter questions by requested parameters
+
     results = []
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
@@ -348,26 +346,30 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
         "audienceType": audience_type,
         "questions": results,
     }
+async def get_questions_excluding_parameters(
+    db, current_user, attribute_type: str, exclude_params: list, model, get_database
+):
+    """Fetch questions excluding given parameters based on audience type,
+    then generate Anchor options. Also fetch up to two anchor questions
+    from uploads collection based on parameters.
+    """
 
-async def get_questions_excluding_parameters(db, current_user, attribute_type: str, exclude_params: list):
-    """Fetch questions excluding given parameters based on audience type."""
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
-    # 1. Get latest CV upload
     latest_cv = await uploads_collection.find_one(
-        {"user_id": ObjectId(current_user["_id"])},
-        sort=[("_id", -1)]
+        {"user_id": ObjectId(current_user["_id"]), "source": "cv"},
+        sort=[("uploaded_at", -1)]
     )
     if not latest_cv or "parsed_data" not in latest_cv:
         raise HTTPException(status_code=404, detail="No CV data found for this user")
 
     parsed_data = latest_cv["parsed_data"]
+    cv_id = str(latest_cv["_id"])   
 
-    # 2. Predict audience type
     audience_type = predict_audience_type(parsed_data)
 
-    # 3. Fetch questions collection
+
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -382,24 +384,76 @@ async def get_questions_excluding_parameters(db, current_user, attribute_type: s
             status_code=404,
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
+    normalized_excludes = [normalize_parameter(e) for e in exclude_params]
+
+   
+    upload_questions = []
+    upload_params = set()
+
+    for aq in latest_cv.get("anchor_questions_with_options", []):
+        included_params = [
+            normalize_parameter(p)
+            for p in aq.get("parameters", [])
+            if normalize_parameter(p) not in normalized_excludes
+        ]
+
+        if included_params:
+            upload_params.update(included_params)
+            upload_questions.append({
+                "parameters": included_params,   
+                "question": aq.get("question"),
+                "type": aq.get("type"),
+                "options": aq.get("options", []),
+                "iconfilename": aq.get("iconfilename"),
+                "source": "uploads_collection"
+            })
+
+        if len(upload_questions) >= 2:   
+            break
 
     results = []
-
-    # 4. Collect questions excluding given params
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
-        if param not in exclude_params:
-            results.append({
-                "parameter": param,
-                "question": cq.get("question"),
-                "type": cq.get("type"),
-                "options": cq.get("options", []),
-                "iconfilename": cq.get("iconfilename"),
-                "source": "questions_collection"
-            })
+
+       
+        if param in normalized_excludes or param in upload_params:
+            continue
+
+        results.append({
+            "parameter": param,
+            "question": cq.get("question"),
+            "type": cq.get("type"),
+            "options": cq.get("options", []),  
+            "iconfilename": cq.get("iconfilename"),
+            "source": "questions_collection"
+        })
+
+    anchor_response = await generate_anchor_attribute_options(
+        questions=results,
+        model=model,
+        get_database=get_database,
+        user_id=str(current_user["_id"])
+    )
+
+    generated_map = {
+        normalize_parameter(p): suggestion.get("options", [])
+        for suggestion in anchor_response.get("suggestions", [])
+        for p in suggestion.get("parameters", [])
+    }
+
+    for q in results:
+        param = normalize_parameter(q["parameter"])
+        if param in generated_map:
+            q["options"] = generated_map[param]
 
     return {
         "success": True,
         "audienceType": audience_type,
+        "cv_id": cv_id,
         "questions": results,
+        "upload_questions": upload_questions
     }
+
+
+
+
