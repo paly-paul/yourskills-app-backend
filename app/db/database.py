@@ -43,7 +43,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-MONGO_URL = os.getenv("DB_URL", "mongodb://snapshot_user:admin@localhost:27017/snapshot?authSource=snapshot")
+MONGO_URL = os.getenv("DB_URL")
 MONGO_DB_NAME = os.getenv("MONGO_DB", "snapshot")
 
 client: AsyncIOMotorClient = None

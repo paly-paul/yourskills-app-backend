@@ -300,7 +300,6 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
-    # 1. Get latest CV upload
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"])},
         sort=[("_id", -1)]
@@ -349,13 +348,14 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
 async def get_questions_excluding_parameters(
     db, current_user, attribute_type: str, exclude_params: list, model, get_database
 ):
-    """Fetch questions excluding given parameters based on audience type,
-    then generate Anchor options. Also fetch up to two anchor questions
-    from uploads collection based on parameters.
+    """Fetch up to two questions from uploads collection (CV),
+    then fetch questions from questions collection excluding
+    given parameters and any already in uploads.
     """
 
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
+
 
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"]), "source": "cv"},
@@ -365,10 +365,36 @@ async def get_questions_excluding_parameters(
         raise HTTPException(status_code=404, detail="No CV data found for this user")
 
     parsed_data = latest_cv["parsed_data"]
-    cv_id = str(latest_cv["_id"])   
+    cv_id = str(latest_cv["_id"])
+
 
     audience_type = predict_audience_type(parsed_data)
 
+    normalized_excludes = [normalize_parameter(e) for e in exclude_params]
+
+    upload_questions = []
+    upload_params = set()  
+
+    for aq in latest_cv.get("anchor_questions_with_options", []):
+        included_params = [
+            normalize_parameter(p)
+            for p in aq.get("parameters", [])
+            if normalize_parameter(p) not in normalized_excludes
+        ]
+
+        if included_params:
+            upload_params.update(included_params)
+            upload_questions.append({
+                "parameters": included_params,
+                "question": aq.get("question"),
+                "type": aq.get("type"),
+                "options": aq.get("options", []),
+                "iconfilename": aq.get("iconfilename"),
+                "source": "uploads_collection"
+            })
+
+        if len(upload_questions) >= 2:  
+            break
 
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
@@ -384,50 +410,32 @@ async def get_questions_excluding_parameters(
             status_code=404,
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
-    normalized_excludes = [normalize_parameter(e) for e in exclude_params]
-
-   
-    upload_questions = []
-    upload_params = set()
-
-    for aq in latest_cv.get("anchor_questions_with_options", []):
-        included_params = [
-            normalize_parameter(p)
-            for p in aq.get("parameters", [])
-            if normalize_parameter(p) not in normalized_excludes
-        ]
-
-        if included_params:
-            upload_params.update(included_params)
-            upload_questions.append({
-                "parameters": included_params,   
-                "question": aq.get("question"),
-                "type": aq.get("type"),
-                "options": aq.get("options", []),
-                "iconfilename": aq.get("iconfilename"),
-                "source": "uploads_collection"
-            })
-
-        if len(upload_questions) >= 2:   
-            break
 
     results = []
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
 
-       
-        if param in normalized_excludes or param in upload_params:
+        if param in normalized_excludes:
+            continue
+
+        skip = False
+        for up in upload_params:
+            if up in param or param in up:
+                skip = True
+                break
+        if skip:
             continue
 
         results.append({
             "parameter": param,
             "question": cq.get("question"),
             "type": cq.get("type"),
-            "options": cq.get("options", []),  
+            "options": cq.get("options", []),
             "iconfilename": cq.get("iconfilename"),
             "source": "questions_collection"
         })
 
+  
     anchor_response = await generate_anchor_attribute_options(
         questions=results,
         model=model,
@@ -450,9 +458,11 @@ async def get_questions_excluding_parameters(
         "success": True,
         "audienceType": audience_type,
         "cv_id": cv_id,
-        "questions": results,
-        "upload_questions": upload_questions
+        "questions": results,            
+        "upload_questions": upload_questions  
     }
+
+
 
 
 
