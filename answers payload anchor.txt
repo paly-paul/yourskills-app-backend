@@ -1,0 +1,18 @@
+{
+  "answers": [
+{
+      "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+      "answer_type": "Short text",
+      "value": "Passionate about new things"
+      
+    }, 
+    {
+	"parameter": "Achievements",
+     	"answer_type": "Yes/ No select + Text entry",
+     	 "value": {
+            "selected": "Yes",
+            "text": "I have achievements and all"
+
+      }
+   ]
+ }  

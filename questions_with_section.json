@@ -4,7 +4,7 @@
     {
       "parameter": "Education",
       "questionText": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
-      "type": "Multi-select + Dropdown + Free text (For Others)",
+      "type": "Single-select + Dropdown",
       "iconFileName": "education",
       "options": [
         {
@@ -116,26 +116,29 @@
     {
       "parameter": "Experience",
       "questionText": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
-      "type": "Short text + Edit view",
+      "type": "Short text",
       "iconFileName": "experience"
     },
     {
       "parameter": "Technical Skills",
       "questionText": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
-      "type": "Multiple select + Text entry",
+      "type": "Multiple select + Add New",
       "iconFileName": "technical_skills"
     },
     {
       "parameter": "Soft Skills",
       "questionText": "Which soft skills come naturally to you — like how you communicate, solve problems, or support your team?",
-      "type": "Multiple select + Text entry",
+      "type": "Multiple select + Add New",
       "iconFileName": "soft_skills"
     },
     {
       "parameter": "Certifications",
       "questionText": "Have you done any certifications, courses, or attended workshops recently?",
-      "type": "Short text + Edit view",
-      "iconFileName": "certifications"
+      "type": "Multiple select + add Tag",
+      "iconFileName": "certifications",
+      "options": ["Google Data Analytics - Coursera",
+                  "Scrum Master – Scrum Alliance",
+                  "UI/UX Bootcamp – Springboard"]
     },
     {
       "parameter": "Salary Grades",
@@ -154,13 +157,16 @@
     {
       "parameter": "Projects",
       "questionText": "Have you worked on any cool projects (college, work, or side projects) that you’d love to share? Big or small – all count!",
-      "type": "Short text + Edit view",
-      "iconFileName": "projects"
+      "type": "Multiple select + add Tag",
+      "iconFileName": "projects",
+      "options": ["Built a to-do app in React",
+                  "Led a team to develop a chatbot",
+                  "Conducted a user research study for an NGO"]
     },
     {
       "parameter": "Languages Known",
       "questionText": "What languages can you speak, read, or write? Let me know your level — like fluent, basic, or somewhere in between.",
-      "type": "Multiple select + Text entry",
+      "type": "Multiple select + Dropdown",
       "iconFileName": "languages",
       "options": [
         "English",
@@ -196,297 +202,56 @@
   ],
 
   "Job attributes": [
-    {
-      "audienceType": "Early Professional (2-3 years of experience)",
-      "questions": [
-        {
-          "parameter": "Core Tasks + Supplementary Tasks",
-          "question": "What kind of stuff do you usually end up doing at work — even the things that weren’t officially part of your job?",
-          "iconfilename": "core_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Emerging Tasks",
-          "question": "Lately, have you picked up any new tasks or started doing things that weren’t part of your original role?",
-          "iconfilename": "emerging_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Hot Technologies",
-          "question": "What tools or tech do you find yourself using the most at work these days?",
-          "iconfilename": "hot_technologies.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Knowledge + Skills",
-          "question": "What skills or knowledge do you lean on most to get your work done?",
-          "iconfilename": "knowledge_skills.png",
-          "type": "Multiple select"
-        },
-        {
-          "parameter": "Abilities + Functional Skills",
-          "question": "What strengths just come naturally to you when you're working?",
-          "iconfilename": "abilities_skills.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Work Styles + Work Activities",
-          "question": "What kind of work setup or vibe helps you do your best?",
-          "iconfilename": "work_styles.png",
-          "type": "Multiple select (Pick any 5)"
-        },
-        {
-          "parameter": "Work Values",
-          "question": "When you think about growing in your career, what really matters most to you?",
-          "iconfilename": "work_values.png",
-          "type": "Multiple select (Pick any 3)"
-        },
-        {
-          "parameter": "Career Interests",
-          "question": "If you could explore or grow into a new area at work, what kind of stuff would you be excited to try?",
-          "iconfilename": "career_interests.png",
-          "type": "Multiple select + Text entry"
-        }
-      ]
-    },
-    {
-      "audienceType": "Student",
-      "questions": [
-        {
-          "parameter": "Core Tasks + Supplementary Tasks",
-          "question": "What kind of tasks do you naturally enjoy or end up doing, even if it's not assigned?",
-          "iconfilename": "core_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Emerging Tasks",
-          "question": "Have you taken on any new things recently that weren’t part of your course or role?",
-          "iconfilename": "emerging_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Hot Technologies",
-          "question": "Which latest tools or technologies have you used or are curious to try?",
-          "iconfilename": "hot_technologies.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Knowledge + Skills",
-          "question": "What subjects or skills do you feel most confident or interested in?",
-          "iconfilename": "knowledge_skills.png",
-          "type": "Multiple select"
-        },
-        {
-          "parameter": "Abilities + Functional Skills",
-          "question": "Which of these things do you feel you’re naturally good at?",
-          "iconfilename": "abilities_skills.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Work Styles + Work Activities",
-          "question": "What kind of work vibe suits you best?",
-          "iconfilename": "work_styles.png",
-          "type": "Multiple select (Pick any 5)"
-        },
-        {
-          "parameter": "Work Values",
-          "question": "What matters the most to you when choosing a job or field?",
-          "iconfilename": "work_values.png",
-          "type": "Multiple select (Pick any 3)"
-        },
-        {
-          "parameter": "Career Interests",
-          "question": "Which roles or fields have caught your attention recently – even just out of curiosity?",
-          "iconfilename": "career_interests.png",
-          "type": "Multiple select + Text entry"
-        }
-      ]
-    },
-    {
-      "audienceType": "Mid Career Pivot",
-      "questions": [
-        {
-          "parameter": "Core Tasks + Supplementary Tasks",
-          "question": "What do you usually spend your work time doing — your regular and side responsibilities?",
-          "iconfilename": "core_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Emerging Tasks",
-          "question": "Have you picked up any new or unexpected responsibilities lately?",
-          "iconfilename": "emerging_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Hot Technologies",
-          "question": "Which tools or technologies do you find yourself using often?",
-          "iconfilename": "hot_technologies.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Knowledge + Skills",
-          "question": "What areas of knowledge or skill do you lean on most in your job?",
-          "iconfilename": "knowledge_skills.png",
-          "type": "Multiple select"
-        },
-        {
-          "parameter": "Abilities + Functional Skills",
-          "question": "What kind of strengths come naturally to you at work?",
-          "iconfilename": "abilities_skills.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Work Styles + Work Activities",
-          "question": "What kind of work style or setup helps you do your best work?",
-          "iconfilename": "work_styles.png",
-          "type": "Multiple select (Pick any 5)"
-        },
-        {
-          "parameter": "Work Values",
-          "question": "What matters most to you in your next career move?",
-          "iconfilename": "work_values.png",
-          "type": "Multiple select (Pick any 3)"
-        },
-        {
-          "parameter": "Career Interests",
-          "question": "If you could explore a new role, what direction would excite you most?",
-          "iconfilename": "career_interests.png",
-          "type": "Multiple select + Text entry"
-        }
-      ]
-    },
-    {
-      "audienceType": "Job Seeker",
-      "questions": [
-        {
-          "parameter": "Core Tasks + Supplementary Tasks",
-          "question": "What kind of stuff do you mostly do (or used to do) at work?",
-          "iconfilename": "core_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Emerging Tasks",
-          "question": "Have you started doing any new tasks that weren’t part of your role earlier?",
-          "iconfilename": "emerging_tasks.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Hot Technologies",
-          "question": "Which tools or tech have you worked with recently (or are comfortable learning)?",
-          "iconfilename": "hot_technologies.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Knowledge + Skills",
-          "question": "What areas do you feel strong in – the stuff you’ve got a good grip on?",
-          "iconfilename": "knowledge_skills.png",
-          "type": "Multiple select"
-        },
-        {
-          "parameter": "Abilities + Functional Skills",
-          "question": "What strengths or talents come naturally to you?",
-          "iconfilename": "abilities_skills.png",
-          "type": "Multiple select + Text entry"
-        },
-        {
-          "parameter": "Work Styles + Work Activities",
-          "question": "What kind of work style or day-to-day vibe suits you best?",
-          "iconfilename": "work_styles.png",
-          "type": "Multiple select (Pick any 5)"
-        },
-        {
-          "parameter": "Work Values",
-          "question": "What matters most to you in a job right now?",
-          "iconfilename": "work_values.png",
-          "type": "Multiple select (Pick any 3)"
-        },
-        {
-          "parameter": "Career Interests",
-          "question": "If you could try a new role or career direction, what would excite you the most?",
-          "iconfilename": "career_interests.png",
-          "type": "Multiple select + Text entry"
-        }
-      ]
-    }
-  ],
-
-   "Anchor attributes": [
   {
     "audienceType": "Early Professional (2-3 years of experience)",
     "questions": [
       {
-        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-        "question": "What kind of things light you up — things that pull you in without much effort?",
-        "iconfilename": "interests.png",
-        "type": "Short text"
+        "parameter": "Core Tasks + Supplementary Tasks",
+        "question": "What kind of stuff do you usually end up doing at work — even the things that weren’t officially part of your job?",
+        "iconfilename": "core_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Achievements",
-        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
-        "iconfilename": "trophy.png",
-        "options": ["Yes", "No"],
-        "type": "Yes/ No select + Text entry"
+        "parameter": "Emerging Tasks",
+        "question": "Lately, have you picked up any new tasks or started doing things that weren’t part of your original role?",
+        "iconfilename": "emerging_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
-        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
-        "iconfilename": "behavior.png",
-        "options": [
-          "I learn fast when I can try it myself",
-          "I stay calm and adjust when things change",
-          "I break problems into steps before solving them",
-          "I like giving or receiving honest feedback",
-          "I can pick things up quickly with visuals or stories",
-          "I stay focused even in messy or noisy settings",
-          "I enjoy helping others stay motivated",
-          "I need structure but can adapt when needed",
-          "I bounce back after mistakes or criticism",
-          "[Other] (Add your own)"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Hot Technologies",
+        "question": "What tools or tech do you find yourself using the most at work these days?",
+        "iconfilename": "hot_technologies.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
-        "iconfilename": "strengths.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Knowledge + Skills",
+        "question": "What skills or knowledge do you lean on most to get your work done?",
+        "iconfilename": "knowledge_skills.png",
+        "type": "Multiple select"
       },
       {
-        "parameter": "Social Causes + Volunteering + Cultural Exposure",
-        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
-        "iconfilename": "community.png",
-        "options": [
-          "Volunteered for a social cause or NGO",
-          "Helped organize community events",
-          "Participated in cultural exchange programs",
-          "Mentored someone or guided juniors",
-          "Raised awareness or funds for a cause",
-          "Worked with people from diverse backgrounds",
-          "Traveled for learning, not just fun",
-          "Engaged in online communities or activism",
-          "[Other] (Add your own)"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Functional Skills",
+        "question": "What strengths just come naturally to you when you're working?",
+        "iconfilename": "abilities_skills.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
-        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
-        "iconfilename": "learning.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Work Styles + Work Activities + Abilities",
+        "question": "What kind of work setup or vibe helps you do your best?",
+        "iconfilename": "work_styles.png",
+        "type": "Multiple select (Pick any 5)"
       },
       {
-        "parameter": "Interests - RIASEC",
-        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
-        "iconfilename": "riasec.png",
-        "options": [
-          "Realistic – I like hands-on work, tools, machines, or outdoors",
-          "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-          "Artistic – I lean toward creative, unstructured, expressive work",
-          "Social – I like helping, teaching, or guiding others",
-          "Enterprising – I enjoy leading, influencing, or starting things",
-          "Conventional – I prefer organizing, structuring, or working with systems and details"
-        ],
+        "parameter": "Work Values",
+        "question": "When you think about growing in your career, what really matters most to you?",
+        "iconfilename": "work_values.png",
         "type": "Multiple select (Pick any 3)"
+      },
+      {
+        "parameter": "Career Interests",
+        "question": "If you could explore or grow into a new area at work, what kind of stuff would you be excited to try?",
+        "iconfilename": "career_interests.png",
+        "type": "Multiple select + Add New"
       }
     ]
   },
@@ -494,77 +259,52 @@
     "audienceType": "Student",
     "questions": [
       {
-        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-        "question": "What do you enjoy doing when you're not studying?",
-        "iconfilename": "interests.png",
-        "type": "Short text"
+        "parameter": "Core Tasks + Supplementary Tasks",
+        "question": "What kind of stuff do you usually end up doing — even things outside of your assignments or coursework?",
+        "iconfilename": "core_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Achievements",
-        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
-        "iconfilename": "trophy.png",
-        "options": ["Yes", "No"],
-        "type": "Yes/ No select + Text entry"
+        "parameter": "Emerging Tasks",
+        "question": "Lately, have you taken on any new tasks or projects that weren’t part of your original plan?",
+        "iconfilename": "emerging_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
-        "question": "How do you usually deal with new or tough situations?",
-        "iconfilename": "behavior.png",
-        "options": [
-          "I learn fast when I can try it myself",
-          "I stay calm and adjust when things change",
-          "I break problems into steps before solving them",
-          "I like giving or receiving honest feedback",
-          "I can pick things up quickly with visuals or stories",
-          "I stay focused even in messy or noisy settings",
-          "I enjoy helping others stay motivated",
-          "I need structure but can adapt when needed",
-          "I bounce back after mistakes or criticism",
-          "[Other] (Add your own)"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Hot Technologies",
+        "question": "What tools or tech do you find yourself using the most these days (inside or outside class)?",
+        "iconfilename": "hot_technologies.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-        "question": "Which of these sounds most like your natural strengths or personality?",
-        "iconfilename": "strengths.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Knowledge + Skills",
+        "question": "What skills or knowledge do you lean on most to get things done?",
+        "iconfilename": "knowledge_skills.png",
+        "type": "Multiple select"
       },
       {
-        "parameter": "Social Causes + Volunteering + Cultural Exposure",
-        "question": "Outside studies, have you been part of anything that gave you a fresh perspective or helped others?",
-        "iconfilename": "community.png",
-        "options": [
-          "Environmental or sustainability projects",
-          "Helping underserved communities",
-          "Mental health awareness and support",
-          "Diversity, inclusion, and equality",
-          "Animal welfare",
-          "Global cultures and languages",
-          "Working with kids or education-based causes",
-          "Other: ___"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Functional Skills",
+        "question": "What strengths just come naturally to you when you're studying or working on projects?",
+        "iconfilename": "abilities_skills.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
-        "question": "Have you picked up any new tools, tech, or topics recently – or planning to?",
-        "iconfilename": "learning.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Work Styles + Work Activities + Abilities",
+        "question": "What kind of study or project setup helps you do your best?",
+        "iconfilename": "work_styles.png",
+        "type": "Multiple select (Pick any 5)"
       },
       {
-        "parameter": "Interests - RIASEC",
-        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
-        "iconfilename": "riasec.png",
-        "options": [
-          "Realistic – I like hands-on work, tools, machines, or outdoors",
-          "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-          "Artistic – I lean toward creative, unstructured, expressive work",
-          "Social – I like helping, teaching, or guiding others",
-          "Enterprising – I enjoy leading, influencing, or starting things",
-          "Conventional – I prefer organizing, structuring, or working with systems and details"
-        ],
+        "parameter": "Work Values",
+        "question": "When you think about your future career, what really matters most to you?",
+        "iconfilename": "work_values.png",
         "type": "Multiple select (Pick any 3)"
+      },
+      {
+        "parameter": "Career Interests",
+        "question": "If you could explore or grow into a new area, what kind of stuff would you be excited to try?",
+        "iconfilename": "career_interests.png",
+        "type": "Multiple select + Add New"
       }
     ]
   },
@@ -572,78 +312,52 @@
     "audienceType": "Mid Career Pivot",
     "questions": [
       {
-        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-        "question": "What kind of things light you up — things that pull you in without much effort?",
-        "iconfilename": "interests.png",
-        "type": "Short text"
+        "parameter": "Core Tasks + Supplementary Tasks",
+        "question": "What kind of stuff do you usually end up doing at work — even the things that weren’t officially part of your job?",
+        "iconfilename": "core_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Achievements",
-        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
-        "iconfilename": "trophy.png",
-        "options": ["Yes", "No"],
-        "type": "Yes/ No select + Text entry"
+        "parameter": "Emerging Tasks",
+        "question": "Lately, have you picked up any new tasks or started doing things that weren’t part of your original role?",
+        "iconfilename": "emerging_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
-        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
-        "iconfilename": "behavior.png",
-        "options": [
-          "I learn fast when I can try it myself",
-          "I stay calm and adjust when things change",
-          "I break problems into steps before solving them",
-          "I like giving or receiving honest feedback",
-          "I can pick things up quickly with visuals or stories",
-          "I stay focused even in messy or noisy settings",
-          "I enjoy helping others stay motivated",
-          "I need structure but can adapt when needed",
-          "I bounce back after mistakes or criticism",
-          "[Other] (Add your own)"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Hot Technologies",
+        "question": "What tools or tech do you find yourself using the most at work these days?",
+        "iconfilename": "hot_technologies.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
-        "iconfilename": "strengths.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Knowledge + Skills",
+        "question": "What skills or knowledge do you lean on most to get your work done?",
+        "iconfilename": "knowledge_skills.png",
+        "type": "Multiple select"
       },
       {
-        "parameter": "Social Causes + Volunteering + Cultural Exposure",
-        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
-        "iconfilename": "community.png",
-        "options": [
-          "Volunteered for a social cause or NGO",
-          "Helped organize community events",
-          "Participated in cultural exchange programs",
-          "Mentored someone or guided juniors",
-          "Raised awareness or funds for a cause",
-          "Worked with people from diverse backgrounds",
-          "Traveled for learning, not just fun",
-          "Engaged in online communities or activism",
-          "[Other] (Add your own)"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Functional Skills",
+        "question": "What strengths just come naturally to you when you're working?",
+        "iconfilename": "abilities_skills.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
-        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
-        "iconfilename": "learning.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Work Styles + Work Activities + Abilities",
+        "question": "What kind of work setup or vibe helps you do your best?",
+        "iconfilename": "work_styles.png",
+        "type": "Multiple select (Pick any 5)"
       },
       {
-        "parameter": "Interests - RIASEC",
-        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
-        "iconfilename": "riasec.png",
-        "options": [
-          "Realistic – I like hands-on work, tools, machines, or outdoors",
-          "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-          "Artistic – I lean toward creative, unstructured, expressive work",
-          "Social – I like helping, teaching, or guiding others",
-          "Enterprising – I enjoy leading, influencing, or starting things",
-          "Conventional – I prefer organizing, structuring, or working with systems and details"
-        ],
+        "parameter": "Work Values",
+        "question": "When you think about your next career step, what really matters most to you?",
+        "iconfilename": "work_values.png",
         "type": "Multiple select (Pick any 3)"
+      },
+      {
+        "parameter": "Career Interests",
+        "question": "If you could explore or grow into a new area, what kind of stuff would you be excited to try?",
+        "iconfilename": "career_interests.png",
+        "type": "Multiple select + Add New"
       }
     ]
   },
@@ -651,81 +365,376 @@
     "audienceType": "Job Seeker",
     "questions": [
       {
-        "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-        "question": "What kind of things light you up — things that pull you in without much effort?",
-        "iconfilename": "interests.png",
-        "type": "Short text"
+        "parameter": "Core Tasks + Supplementary Tasks",
+        "question": "What kind of stuff do you usually end up doing at work — even the things that weren’t officially part of your role?",
+        "iconfilename": "core_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Achievements",
-        "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
-        "iconfilename": "trophy.png",
-        "options": ["Yes", "No"],
-        "type": "Yes/ No select + Text entry"
+        "parameter": "Emerging Tasks",
+        "question": "Lately, have you picked up any new tasks or started doing things that weren’t part of your original role?",
+        "iconfilename": "emerging_tasks.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
-        "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
-        "iconfilename": "behavior.png",
-        "options": [
-          "I learn fast when I can try it myself",
-          "I stay calm and adjust when things change",
-          "I break problems into steps before solving them",
-          "I like giving or receiving honest feedback",
-          "I can pick things up quickly with visuals or stories",
-          "I stay focused even in messy or noisy settings",
-          "I enjoy helping others stay motivated",
-          "I need structure but can adapt when needed",
-          "I bounce back after mistakes or criticism",
-          "[Other] (Add your own)"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Hot Technologies",
+        "question": "What tools or tech do you find yourself using the most these days (or feel confident learning)?",
+        "iconfilename": "hot_technologies.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-        "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
-        "iconfilename": "strengths.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Knowledge + Skills",
+        "question": "What skills or knowledge do you lean on most to get your work done?",
+        "iconfilename": "knowledge_skills.png",
+        "type": "Multiple select"
       },
       {
-        "parameter": "Social Causes + Volunteering + Cultural Exposure",
-        "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
-        "iconfilename": "community.png",
-        "options": [
-          "Volunteered for a social cause or NGO",
-          "Helped organize community events",
-          "Participated in cultural exchange programs",
-          "Mentored someone or guided juniors",
-          "Raised awareness or funds for a cause",
-          "Worked with people from diverse backgrounds",
-          "Traveled for learning, not just fun",
-          "Engaged in online communities or activism",
-          "[Other] (Add your own)"
-        ],
-        "type": "Multiple select + Text entry"
+        "parameter": "Functional Skills",
+        "question": "What strengths just come naturally to you when you're working?",
+        "iconfilename": "abilities_skills.png",
+        "type": "Multiple select + Add New"
       },
       {
-        "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
-        "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
-        "iconfilename": "learning.png",
-        "type": "Multiple select + Text entry"
+        "parameter": "Work Styles + Work Activities + Abilities",
+        "question": "What kind of work setup or vibe helps you do your best?",
+        "iconfilename": "work_styles.png",
+        "type": "Multiple select (Pick any 5)"
       },
       {
-        "parameter": "Interests - RIASEC",
-        "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
-        "iconfilename": "riasec.png",
-        "options": [
-          "Realistic – I like hands-on work, tools, machines, or outdoors",
-          "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-          "Artistic – I lean toward creative, unstructured, expressive work",
-          "Social – I like helping, teaching, or guiding others",
-          "Enterprising – I enjoy leading, influencing, or starting things",
-          "Conventional – I prefer organizing, structuring, or working with systems and details"
-        ],
+        "parameter": "Work Values",
+        "question": "When you think about your next job, what really matters most to you?",
+        "iconfilename": "work_values.png",
         "type": "Multiple select (Pick any 3)"
+      },
+      {
+        "parameter": "Career Interests",
+        "question": "If you could explore or grow into a new area, what kind of stuff would you be excited to try?",
+        "iconfilename": "career_interests.png",
+        "type": "Multiple select + Add New"
       }
     ]
   }
-]
+],
+
+
+   
+  "Anchor attributes": [
+    {
+      "audienceType": "Early Professional (2-3 years of experience)",
+      "questions": [
+        {
+          "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+          "question": "What kind of things light you up — things that pull you in without much effort?",
+          "iconfilename": "interests.png",
+          "type": "Short text"
+        },
+        {
+          "parameter": "Achievements",
+          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "iconfilename": "trophy.png",
+          "options": ["Yes", "No"],
+          "type": "Yes/ No select + Text entry"
+        },
+        {
+          "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+          "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+          "iconfilename": "behavior.png",
+          "options": [
+            "I learn fast when I can try it myself",
+            "I stay calm and adjust when things change",
+            "I break problems into steps before solving them",
+            "I like giving or receiving honest feedback",
+            "I can pick things up quickly with visuals or stories",
+            "I stay focused even in messy or noisy settings",
+            "I enjoy helping others stay motivated",
+            "I need structure but can adapt when needed",
+            "I bounce back after mistakes or criticism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+          "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+          "iconfilename": "strengths.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Social Causes + Volunteering + Cultural Exposure",
+          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "iconfilename": "community.png",
+          "options": [
+            "Volunteered for a social cause or NGO",
+            "Helped organize community events",
+            "Participated in cultural exchange programs",
+            "Mentored someone or guided juniors",
+            "Raised awareness or funds for a cause",
+            "Worked with people from diverse backgrounds",
+            "Traveled for learning, not just fun",
+            "Engaged in online communities or activism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+          "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+          "iconfilename": "learning.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Interests - RIASEC",
+          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "iconfilename": "riasec.png",
+          "options": [
+            "Realistic – I like hands-on work, tools, machines, or outdoors",
+            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
+            "Artistic – I lean toward creative, unstructured, expressive work",
+            "Social – I like helping, teaching, or guiding others",
+            "Enterprising – I enjoy leading, influencing, or starting things",
+            "Conventional – I prefer organizing, structuring, or working with systems and details"
+          ],
+          "type": "Multiple select (Pick any 3)"
+        }
+      ]
+    },
+    {
+      "audienceType": "Student",
+      "questions": [
+        {
+          "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+          "question": "What kind of things light you up — things that pull you in without much effort?",
+          "iconfilename": "interests.png",
+          "type": "Short text"
+        },
+        {
+          "parameter": "Achievements",
+          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "iconfilename": "trophy.png",
+          "options": ["Yes", "No"],
+          "type": "Yes/ No select + Text entry"
+        },
+        {
+          "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+          "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+          "iconfilename": "behavior.png",
+          "options": [
+            "I learn fast when I can try it myself",
+            "I stay calm and adjust when things change",
+            "I break problems into steps before solving them",
+            "I like giving or receiving honest feedback",
+            "I can pick things up quickly with visuals or stories",
+            "I stay focused even in messy or noisy settings",
+            "I enjoy helping others stay motivated",
+            "I need structure but can adapt when needed",
+            "I bounce back after mistakes or criticism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+          "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+          "iconfilename": "strengths.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Social Causes + Volunteering + Cultural Exposure",
+          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "iconfilename": "community.png",
+          "options": [
+            "Volunteered for a social cause or NGO",
+            "Helped organize community events",
+            "Participated in cultural exchange programs",
+            "Mentored someone or guided juniors",
+            "Raised awareness or funds for a cause",
+            "Worked with people from diverse backgrounds",
+            "Traveled for learning, not just fun",
+            "Engaged in online communities or activism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+          "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+          "iconfilename": "learning.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Interests - RIASEC",
+          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "iconfilename": "riasec.png",
+          "options": [
+            "Realistic – I like hands-on work, tools, machines, or outdoors",
+            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
+            "Artistic – I lean toward creative, unstructured, expressive work",
+            "Social – I like helping, teaching, or guiding others",
+            "Enterprising – I enjoy leading, influencing, or starting things",
+            "Conventional – I prefer organizing, structuring, or working with systems and details"
+          ],
+          "type": "Multiple select (Pick any 3)"
+        }
+      ]
+    },
+    {
+      "audienceType": "Mid Career Pivot",
+      "questions": [
+        {
+          "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+          "question": "What kind of things light you up — things that pull you in without much effort?",
+          "iconfilename": "interests.png",
+          "type": "Short text"
+        },
+        {
+          "parameter": "Achievements",
+          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "iconfilename": "trophy.png",
+          "options": ["Yes", "No"],
+          "type": "Yes/ No select + Text entry"
+        },
+        {
+          "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+          "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+          "iconfilename": "behavior.png",
+          "options": [
+            "I learn fast when I can try it myself",
+            "I stay calm and adjust when things change",
+            "I break problems into steps before solving them",
+            "I like giving or receiving honest feedback",
+            "I can pick things up quickly with visuals or stories",
+            "I stay focused even in messy or noisy settings",
+            "I enjoy helping others stay motivated",
+            "I need structure but can adapt when needed",
+            "I bounce back after mistakes or criticism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+          "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+          "iconfilename": "strengths.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Social Causes + Volunteering + Cultural Exposure",
+          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "iconfilename": "community.png",
+          "options": [
+            "Volunteered for a social cause or NGO",
+            "Helped organize community events",
+            "Participated in cultural exchange programs",
+            "Mentored someone or guided juniors",
+            "Raised awareness or funds for a cause",
+            "Worked with people from diverse backgrounds",
+            "Traveled for learning, not just fun",
+            "Engaged in online communities or activism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+          "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+          "iconfilename": "learning.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Interests - RIASEC",
+          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "iconfilename": "riasec.png",
+          "options": [
+            "Realistic – I like hands-on work, tools, machines, or outdoors",
+            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
+            "Artistic – I lean toward creative, unstructured, expressive work",
+            "Social – I like helping, teaching, or guiding others",
+            "Enterprising – I enjoy leading, influencing, or starting things",
+            "Conventional – I prefer organizing, structuring, or working with systems and details"
+          ],
+          "type": "Multiple select (Pick any 3)"
+        }
+      ]
+    },
+    {
+      "audienceType": "Job Seeker",
+      "questions": [
+        {
+          "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+          "question": "What kind of things light you up — things that pull you in without much effort?",
+          "iconfilename": "interests.png",
+          "type": "Short text"
+        },
+        {
+          "parameter": "Achievements",
+          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "iconfilename": "trophy.png",
+          "options": ["Yes", "No"],
+          "type": "Yes/ No select + Text entry"
+        },
+        {
+          "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
+          "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
+          "iconfilename": "behavior.png",
+          "options": [
+            "I learn fast when I can try it myself",
+            "I stay calm and adjust when things change",
+            "I break problems into steps before solving them",
+            "I like giving or receiving honest feedback",
+            "I can pick things up quickly with visuals or stories",
+            "I stay focused even in messy or noisy settings",
+            "I enjoy helping others stay motivated",
+            "I need structure but can adapt when needed",
+            "I bounce back after mistakes or criticism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+          "question": "Let’s talk strengths – what do people usually say you’re really good at, even outside of work?",
+          "iconfilename": "strengths.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Social Causes + Volunteering + Cultural Exposure",
+          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "iconfilename": "community.png",
+          "options": [
+            "Volunteered for a social cause or NGO",
+            "Helped organize community events",
+            "Participated in cultural exchange programs",
+            "Mentored someone or guided juniors",
+            "Raised awareness or funds for a cause",
+            "Worked with people from diverse backgrounds",
+            "Traveled for learning, not just fun",
+            "Engaged in online communities or activism",
+            "[Other] (Add your own)"
+          ],
+          "type": "Multiple select + Add New"
+        },
+        {
+          "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
+          "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
+          "iconfilename": "learning.png",
+          "type": "Multiple select + add Tag"
+        },
+        {
+          "parameter": "Interests - RIASEC",
+          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "iconfilename": "riasec.png",
+          "options": [
+            "Realistic – I like hands-on work, tools, machines, or outdoors",
+            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
+            "Artistic – I lean toward creative, unstructured, expressive work",
+            "Social – I like helping, teaching, or guiding others",
+            "Enterprising – I enjoy leading, influencing, or starting things",
+            "Conventional – I prefer organizing, structuring, or working with systems and details"
+          ],
+          "type": "Multiple select (Pick any 3)"
+        }
+      ]
+    }
+  ]
 }
 ]

@@ -489,37 +489,35 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
 
 
-def clean_llm_json_response(text: str) -> str:
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1:
-        return text
-    return text[start:end+1]
+# def clean_llm_json_response(text: str) -> str:
+#     start = text.find("{")
+#     end = text.rfind("}")
+#     if start == -1 or end == -1:
+#         return text
+#     return text[start:end+1]
 
+# async def fetch_latest_anchor_answers(db, cv_id: str) -> dict:
+#     answers_col = db["answers"]
 
-# ---- fetch latest free-text answers ----
-async def fetch_latest_anchor_answers(db, cv_id: str) -> dict:
-    answers_col = db["answers"]
+#     base_parameters = [
+#         "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+#         "Achievements"
+#     ]
 
-    base_parameters = [
-        "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-        "Achievements"
-    ]
+#     cursor = answers_col.find(
+#         {"cv_id": cv_id, "parameter": {"$in": base_parameters}},
+#         {"parameter": 1, "free_text": 1, "created_at": 1, "_id": 0}
+#     ).sort("created_at", -1)
 
-    cursor = answers_col.find(
-        {"cv_id": cv_id, "parameter": {"$in": base_parameters}},
-        {"parameter": 1, "free_text": 1, "created_at": 1, "_id": 0}
-    ).sort("created_at", -1)
+#     results = await cursor.to_list(length=None)
 
-    results = await cursor.to_list(length=None)
+#     latest_answers = {}
+#     for ans in results:
+#         param = ans["parameter"]
+#         if param not in latest_answers:  
+#             latest_answers[param] = ans.get("free_text", "")
 
-    latest_answers = {}
-    for ans in results:
-        param = ans["parameter"]
-        if param not in latest_answers:  # newest first wins
-            latest_answers[param] = ans.get("free_text", "")
-
-    return latest_answers
+#     return latest_answers
 
 
 
@@ -537,8 +535,11 @@ async def get_latest_user_cv(db, user_id: str):
 
 async def generate_anchor_attribute_options(user_id: str, questions, model, get_database):
     """
-    Generate multiple-choice options for Anchor attributes based on free-text answers
-    and save them into uploads collection under the latest CV document of the logged-in user.
+    Generate multiple-choice options for Anchor attributes based ONLY on:
+    - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
+    - Achievements (text field only)
+
+    Save them back into uploads collection under the latest CV document of the logged-in user.
     """
 
     target_parameters = {
@@ -548,17 +549,35 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
 
     db = await get_database()
 
-    # ✅ Fetch latest uploaded CV for this user
     latest_cv = await get_latest_user_cv(db, user_id)
     if not latest_cv or "parsed_data" not in latest_cv:
         raise HTTPException(status_code=404, detail="No CV found for this user")
 
     cv_id = str(latest_cv["_id"])
 
-    # ✅ Fetch free-text anchor answers
-    base_free_text_map = await fetch_latest_anchor_answers(db, cv_id)
-    if not base_free_text_map:
-        raise HTTPException(status_code=404, detail="No base free-text answers found")
+    cursor = db["answers"].find({
+        "cv_id": cv_id,
+        "section": "Anchor Attributes",
+        "parameter": {
+            "$in": [
+                "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+                "Achievements"
+            ]
+        }
+    })
+    answers = await cursor.to_list(length=None)
+
+    if not answers:
+        raise HTTPException(status_code=404, detail="No required anchor answers found")
+
+    base_free_text_map = {}
+    for ans in answers:
+        param = ans["parameter"]
+        val = ans["value"]
+        if isinstance(val, str):
+            base_free_text_map[param] = val
+        elif isinstance(val, dict) and "text" in val:
+            base_free_text_map[param] = val["text"]
 
     suggestions = []
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
@@ -576,6 +595,10 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     random.shuffle(style_noise_pool)
     style_noise = ", ".join(style_noise_pool[:3])
 
+    non_empty_texts = [t for t in base_free_text_map.values() if t]
+    random.shuffle(non_empty_texts)
+    context_sample = "\n".join(non_empty_texts)
+
     for q in questions:
         parameter = q.get("parameter")
         if parameter not in target_parameters:
@@ -589,15 +612,11 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         option_count = 5 * len(parameter_list)
         labels = [chr(65 + i) for i in range(option_count)]
 
-        non_empty_texts = [t for t in base_free_text_map.values() if t]
-        random.shuffle(non_empty_texts)
-        context_sample = "\n".join(non_empty_texts[:2])
-
         variation_instructions = (
             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
             "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
             "- Introduce synonyms, shuffle word order, or shorten differently.\n"
-            "- Do NOT reuse exact same option wording as before.\n"
+            "- Do NOT invent anything that is not explicitly present in the free-text answers.\n"
             f"- Apply these random variation rules: {style_noise}\n"
         )
 
@@ -654,11 +673,11 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
                 "error": str(e)
             })
 
-    # ✅ Save back into the latest CV document
     await db["uploads"].update_one(
         {"_id": latest_cv["_id"]},
         {"$set": {"anchor_questions_with_options": suggestions}}
     )
 
     return {"success": True, "suggestions": suggestions}
+
 

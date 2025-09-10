@@ -1,6 +1,6 @@
 
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from pydantic import BaseModel, EmailStr, Field
 import uuid
 
@@ -79,17 +79,18 @@ class SkillSuggestionModel(BaseModel):
     technical_skills_suggestions: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+
 class AnswerModel(BaseModel):
     id: str = Field(default_factory=generate_uuid, alias="_id")
     user_id: str
     tenant_id: str
-    cv_id: str                          
-    section: str                        
-    parameter: str                      
-    answer_type: str                    
-    selected_options: List[str] = []    
-    free_text: Optional[str] = None     
+    cv_id: str
+    section: str
+    parameter: str
+    answer_type: str
+    value: Optional[Union[str, List[str], Dict[str, str]]] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
 
 
 

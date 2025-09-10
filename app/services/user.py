@@ -125,8 +125,7 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
                 section=section,
                 parameter=ans["parameter"],
                 answer_type=ans.get("answer_type", "Short text + Edit view"),
-                selected_options=ans.get("selected_options", []),
-                free_text=ans.get("free_text"),
+                value=ans.get("value"),   # ✅ FIXED
                 created_at=datetime.utcnow()
             ).dict(by_alias=True)
         )
@@ -135,4 +134,5 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
         await db["answers"].insert_many(answer_docs)
 
     return {"message": "Answers saved successfully", "cv_id": cv_id}
+
 

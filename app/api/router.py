@@ -22,7 +22,6 @@ from app.services.profile import (
     get_questions_excluding_parameters, get_questions_by_parameters
 )
 
-# models.py (or services/llm.py)
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -30,7 +29,6 @@ from dotenv import load_dotenv
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# create a single instance of your model
 gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
 def get_llm_model():
@@ -136,7 +134,6 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    # ---- Generate missing skill suggestions if needed ----
     softskills_suggestions, technical_skills_suggestions = [], []
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
@@ -155,7 +152,6 @@ async def extract_cv(
         db=db
     )
 
-    # ---- Generate only Job Attribute options ----
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
@@ -320,11 +316,29 @@ async def submit_job_attr_answers(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
+    answers = payload.get("answers", [])
+
+    for ans in answers:
+        parameter = ans.get("parameter")
+        selected_values = ans.get("value", [])
+
+        if parameter == "Work Styles + Work Activities + Abilities" and len(selected_values) > 5:
+            raise HTTPException(
+                status_code=400,
+                detail="You can select a maximum of 5 options for 'Work Styles + Work Activities + Abilities'."
+            )
+
+        if parameter == "Work Values" and len(selected_values) > 3:
+            raise HTTPException(
+                status_code=400,
+                detail="You can select a maximum of 3 options for 'Work Values'."
+            )
+
     return await save_latest_cv_answers(
         db=db,
         current_user=current_user,
         section="Job Attributes",
-        answers=payload["answers"]
+        answers=answers
     )
 
 
@@ -334,11 +348,23 @@ async def submit_anchor_attr_answers(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
+    answers = payload.get("answers", [])
+
+    for ans in answers:
+        parameter = ans.get("parameter")
+        selected_values = ans.get("value", [])
+
+        if parameter == "Interests - RIASEC" and len(selected_values) > 3:
+            raise HTTPException(
+                status_code=400,
+                detail="You can select a maximum of 3 options for 'Interests - RIASEC'."
+            )
+
     return await save_latest_cv_answers(
         db=db,
         current_user=current_user,
         section="Anchor Attributes",
-        answers=payload["answers"]
+        answers=answers
     )
 
 

@@ -1,0 +1,81 @@
+{
+  "answers": [
+{
+      "parameter": "Education",
+      "answer_type": "Single-select + Dropdown",
+      "value": {
+            "selected": "Bachelor's",
+            "selectedField": "B.Sc. Computer Science / IT / Data Science"
+        }
+
+    },
+     {
+      "parameter": "Experience",
+      "answer_type": "Short text",
+      "value": "Software Engineer - IT, Business Analyst - Finance, Marketing Intern - Advertising"
+      
+    },
+  {
+      "parameter": "Technical Skills",
+      "answer_type": "Multi-select + Add New",
+      "value": [
+        "CRM platforms",
+        "Project management",
+        "Data tools",
+        "Python",
+        "Figma"
+      ]
+    },
+     {
+      "parameter": "Soft Skills",
+      "answer_type": "Multi-select + Add New",
+      "value": [
+        "CRM platforms",
+        "Project management",
+        "Data tools",
+        "Python",
+        "Figma"
+      ]
+     },
+   
+     "parameter": "Certifications",
+      "answer_type": "Multiple select + add Tag",
+      "value": [
+        "CRM platforms",
+        "Project management",
+        "Data tools",
+        "Python",
+        "Figma"
+      ]
+     },
+     {
+      "parameter": "Salary Grades",
+      "answer_type": "Single Select",
+      "value": "₹35L+ / $70K+"
+    },
+    "parameter": "Projects:",
+      "answer_type": "Multiple select + add Tag",
+      "value": [
+        "CRM platforms",
+        "Project management",
+        "Data tools",
+        "Python",
+        "Figma"
+      ]
+     },
+     {
+      "parameter": "Languages Known",
+      "answer_type": "Multi-select + Dropdown,
+       "value": [
+            "English",
+            "German"
+        ]
+       },
+       {
+      "parameter": "Career Objective",
+      "answer_type": "Short text",
+      "value": "Passionate about new things"
+      
+    }
+  ]
+}

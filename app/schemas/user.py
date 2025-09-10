@@ -113,15 +113,17 @@ class ResumeExtractResponse(BaseModel):
     years_experience: Optional[int]
     skills: List[SkillIn]
 
+
+
 class AnswerCreate(BaseModel):
     parameter: str
-    answer_type: str 
-    selected_options: Optional[List[str]] = None  
-    free_text: Optional[str] = None 
+    answer_type: str
+    value: Optional[Union[str, List[str], Dict[str, str]]] = None
 
 
 class AnswersSubmit(BaseModel):
     answers: List[AnswerCreate]
+
 
 
     class Config:
