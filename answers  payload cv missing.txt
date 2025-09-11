@@ -53,6 +53,7 @@
       "answer_type": "Single Select",
       "value": "₹35L+ / $70K+"
     },
+    {
     "parameter": "Projects:",
       "answer_type": "Multiple select + add Tag",
       "value": [

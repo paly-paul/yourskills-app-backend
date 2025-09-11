@@ -3,7 +3,7 @@
   "Cv Missing": [
     {
       "parameter": "Education",
-      "questionText": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
+      "question": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
       "type": "Single-select + Dropdown",
       "iconFileName": "education",
       "options": [
@@ -115,25 +115,25 @@
     },
     {
       "parameter": "Experience",
-      "questionText": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
+      "question": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
       "type": "Short text",
       "iconFileName": "experience"
     },
     {
       "parameter": "Technical Skills",
-      "questionText": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
+      "question": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
       "type": "Multiple select + Add New",
       "iconFileName": "technical_skills"
     },
     {
       "parameter": "Soft Skills",
-      "questionText": "Which soft skills come naturally to you — like how you communicate, solve problems, or support your team?",
+      "question": "Which soft skills come naturally to you — like how you communicate, solve problems, or support your team?",
       "type": "Multiple select + Add New",
       "iconFileName": "soft_skills"
     },
     {
       "parameter": "Certifications",
-      "questionText": "Have you done any certifications, courses, or attended workshops recently?",
+      "question": "Have you done any certifications, courses, or attended workshops recently?",
       "type": "Multiple select + add Tag",
       "iconFileName": "certifications",
       "options": ["Google Data Analytics - Coursera",
@@ -142,7 +142,7 @@
     },
     {
       "parameter": "Salary Grades",
-      "questionText": "If you’re comfortable sharing, what’s your current or expected salary range? Totally okay to skip if you’d rather not say!",
+      "question": "If you’re comfortable sharing, what’s your current or expected salary range? Totally okay to skip if you’d rather not say!",
       "type": "Single Select",
       "iconFileName": "salary",
       "options": [
@@ -156,7 +156,7 @@
     },
     {
       "parameter": "Projects",
-      "questionText": "Have you worked on any cool projects (college, work, or side projects) that you’d love to share? Big or small – all count!",
+      "question": "Have you worked on any cool projects (college, work, or side projects) that you’d love to share? Big or small – all count!",
       "type": "Multiple select + add Tag",
       "iconFileName": "projects",
       "options": ["Built a to-do app in React",
@@ -165,7 +165,7 @@
     },
     {
       "parameter": "Languages Known",
-      "questionText": "What languages can you speak, read, or write? Let me know your level — like fluent, basic, or somewhere in between.",
+      "question": "What languages can you speak, read, or write? Let me know your level — like fluent, basic, or somewhere in between.",
       "type": "Multiple select + Dropdown",
       "iconFileName": "languages",
       "options": [
@@ -195,7 +195,7 @@
     },
     {
       "parameter": "Career Objective",
-      "questionText": "If you had to describe yourself in your current career — like what you do, what drives you, and what kind of work excites you — how would you put it in a few lines?",
+      "question": "If you had to describe yourself in your current career — like what you do, what drives you, and what kind of work excites you — how would you put it in a few lines?",
       "type": "Short text",
       "iconFileName": "career_objective"
     }
@@ -239,13 +239,15 @@
         "parameter": "Work Styles + Work Activities + Abilities",
         "question": "What kind of work setup or vibe helps you do your best?",
         "iconfilename": "work_styles.png",
-        "type": "Multiple select (Pick any 5)"
+        "type": "Multiple select + limit",
+        "Limit": 5
       },
       {
         "parameter": "Work Values",
         "question": "When you think about growing in your career, what really matters most to you?",
         "iconfilename": "work_values.png",
-        "type": "Multiple select (Pick any 3)"
+        "type": "Multiple select + limit",
+        "Limit": 3
       },
       {
         "parameter": "Career Interests",
@@ -292,14 +294,16 @@
         "parameter": "Work Styles + Work Activities + Abilities",
         "question": "What kind of study or project setup helps you do your best?",
         "iconfilename": "work_styles.png",
-        "type": "Multiple select (Pick any 5)"
+        "type": "Multiple select + limit",
+        "Limit": 5
       },
       {
         "parameter": "Work Values",
         "question": "When you think about your future career, what really matters most to you?",
         "iconfilename": "work_values.png",
-        "type": "Multiple select (Pick any 3)"
-      },
+        "type": "Multiple select + limit",
+        "Limit": 3
+     },
       {
         "parameter": "Career Interests",
         "question": "If you could explore or grow into a new area, what kind of stuff would you be excited to try?",
@@ -345,13 +349,15 @@
         "parameter": "Work Styles + Work Activities + Abilities",
         "question": "What kind of work setup or vibe helps you do your best?",
         "iconfilename": "work_styles.png",
-        "type": "Multiple select (Pick any 5)"
+        "type": "Multiple select + limit",
+        "Limit": 5
       },
       {
         "parameter": "Work Values",
         "question": "When you think about your next career step, what really matters most to you?",
         "iconfilename": "work_values.png",
-        "type": "Multiple select (Pick any 3)"
+        "type": "Multiple select + limit",
+        "Limit": 3
       },
       {
         "parameter": "Career Interests",
@@ -398,13 +404,15 @@
         "parameter": "Work Styles + Work Activities + Abilities",
         "question": "What kind of work setup or vibe helps you do your best?",
         "iconfilename": "work_styles.png",
-        "type": "Multiple select (Pick any 5)"
+        "type": "Multiple select + limit",
+        "Limit": 5
       },
       {
         "parameter": "Work Values",
         "question": "When you think about your next job, what really matters most to you?",
         "iconfilename": "work_values.png",
-        "type": "Multiple select (Pick any 3)"
+        "type": "Multiple select + limit",
+        "Limit": 3
       },
       {
         "parameter": "Career Interests",
@@ -415,8 +423,6 @@
     ]
   }
 ],
-
-
    
   "Anchor attributes": [
     {
@@ -494,7 +500,8 @@
             "Enterprising – I enjoy leading, influencing, or starting things",
             "Conventional – I prefer organizing, structuring, or working with systems and details"
           ],
-          "type": "Multiple select (Pick any 3)"
+          "type": "Multiple select + limit",
+          "Limit": 3
         }
       ]
     },
@@ -573,7 +580,8 @@
             "Enterprising – I enjoy leading, influencing, or starting things",
             "Conventional – I prefer organizing, structuring, or working with systems and details"
           ],
-          "type": "Multiple select (Pick any 3)"
+          "type": "Multiple select + limit",
+          "Limit": 3
         }
       ]
     },
@@ -652,7 +660,8 @@
             "Enterprising – I enjoy leading, influencing, or starting things",
             "Conventional – I prefer organizing, structuring, or working with systems and details"
           ],
-          "type": "Multiple select (Pick any 3)"
+          "type": "Multiple select + limit",
+          "Limit": 3
         }
       ]
     },
@@ -731,7 +740,8 @@
             "Enterprising – I enjoy leading, influencing, or starting things",
             "Conventional – I prefer organizing, structuring, or working with systems and details"
           ],
-          "type": "Multiple select (Pick any 3)"
+          "type": "Multiple + limit",
+          "Limit": 3
         }
       ]
     }

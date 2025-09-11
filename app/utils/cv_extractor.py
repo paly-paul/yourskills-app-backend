@@ -411,9 +411,9 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
 async def generate_job_attribute_options(cv_context: dict, questions_from_db: list) -> dict:
     """
     Generates multiple-choice options for each job attribute question.
-    Each parameter contributes exactly 5 options.
+    Each parameter contributes exactly 5 options, unless a `limit` is specified in the question.
     If the parameter string has multiple joined with '+', 
-    total options = 5 * number_of_parameters.
+    total options = 5 * number_of_parameters (or capped by limit).
     """
     results = []
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
@@ -421,13 +421,22 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
     for q in questions_from_db:
         parameter = q.get("parameter", "")
         question_text = q.get("question")
-        type = q.get("type")
+        qtype = q.get("type")
         iconfilename = q.get("iconfilename")
 
+        # handle both "limit" and "Limit"
+        limit = q.get("limit") or q.get("Limit")
+
         parameter_list = [p.strip() for p in parameter.split("+")]
+
+        # Default option count
         option_count = 5 * len(parameter_list)
 
-        labels = [chr(65 + i) for i in range(option_count)]  # ['A','B','C'...]
+        # Apply limit if provided
+        if isinstance(limit, int) and limit > 0:
+            option_count = min(option_count, limit)
+
+        labels = [chr(65 + i) for i in range(option_count)]
 
         prompt = (
             "You are an AI assistant generating career-related multiple-choice options.\n\n"
@@ -465,27 +474,37 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
                 formatted_options.append(opt_text)
 
-            results.append({
+            result_item = {
                 "parameters": parameter_list,
                 "question": question_text,
-                "type":type,
+                "type": qtype,
                 "iconfilename": iconfilename,
                 "options": formatted_options
-            })
+            }
+            if limit is not None:  # only include if it was in input
+                result_item["limit"] = limit
+
+            results.append(result_item)
 
         except Exception:
-            results.append({
+            result_item = {
                 "parameters": parameter_list,
                 "question": question_text,
-                "type":type,
+                "type": qtype,
                 "iconfilename": iconfilename,
                 "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
-            })
+            }
+            if limit is not None:
+                result_item["limit"] = limit
+
+            results.append(result_item)
 
     return {
         "success": True,
         "suggestions": results
     }
+
+
 
 
 

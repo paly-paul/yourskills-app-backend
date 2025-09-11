@@ -117,6 +117,22 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
 
     answer_docs = []
     for ans in answers:
+        answer_type = ans.get("answer_type", "Short text + Edit view")
+        value = ans.get("value")
+        limit = ans.get("limit")  
+        if answer_type == "Multi-select + limit":
+            if limit is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Parameter '{ans['parameter']}' requires a 'limit' value"
+                )
+            if isinstance(value, list) and len(value) > limit:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Too many selections for parameter '{ans['parameter']}'. "
+                           f"Allowed: {limit}, Provided: {len(value)}"
+                )
+
         answer_docs.append(
             AnswerModel(
                 user_id=str(user_id),
@@ -124,8 +140,9 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
                 cv_id=cv_id,
                 section=section,
                 parameter=ans["parameter"],
-                answer_type=ans.get("answer_type", "Short text + Edit view"),
-                value=ans.get("value"),   # ✅ FIXED
+                answer_type=answer_type,
+                value=value,
+                limit=limit,   
                 created_at=datetime.utcnow()
             ).dict(by_alias=True)
         )
@@ -134,5 +151,7 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
         await db["answers"].insert_many(answer_docs)
 
     return {"message": "Answers saved successfully", "cv_id": cv_id}
+
+
 
 

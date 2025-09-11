@@ -115,10 +115,12 @@ class ResumeExtractResponse(BaseModel):
 
 
 
+
 class AnswerCreate(BaseModel):
     parameter: str
     answer_type: str
     value: Optional[Union[str, List[str], Dict[str, str]]] = None
+    limit: Optional[int] = None 
 
 
 class AnswersSubmit(BaseModel):

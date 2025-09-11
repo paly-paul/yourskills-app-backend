@@ -475,6 +475,119 @@ async def get_latest_cv_details(
 
     return {"success": True, "cv_details": formatted_data}
 
+@router.get("/cv/profile-data")
+async def get_cv_profile_data(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    uploads_collection = db["uploads"]
+    answers_collection = db["answers"]
+
+    user_id = str(current_user.get("_id"))
+
+    # --- get latest cv upload ---
+    query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
+    cv_doc = await uploads_collection.find_one(
+        query,
+        sort=[("uploaded_at", DESCENDING)]
+    )
+    parsed_data = cv_doc.get("parsed_data", {}) if cv_doc else {}
+
+    # --- Talent Information template ---
+    talent_info = {
+        "Education": parsed_data.get("Education", []),
+        "Internships": parsed_data.get("Internships", []),
+        "Projects": parsed_data.get("Projects", []),
+        "Experience": parsed_data.get("WorkExperience", []),
+        "Core Tasks": "",
+        "Supplementary Tasks": "",
+        "Emerging Tasks": "",
+        "Knowledge": "",
+        "Skills": "",
+        "Abilities": "",
+        "Work activities": "",
+        "Work styles": "",
+        "Work values": "",
+        "Technical Skills": parsed_data.get("Skills", {}).get("HardSkills", []),
+        "Hot Technologies": "",
+        "Soft Skills": parsed_data.get("Skills", {}).get("SoftSkills", []),
+        "Functional Skills": "",
+        "Certifications": parsed_data.get("Certifications", []),
+        "Salary grades": "",
+        "Career Objective": parsed_data.get("Summary"),
+        "Career Interest Areas": ""
+    }
+
+    # --- Anchor Attributes template ---
+    anchor_attrs = {
+        "Achievements": "",
+        "Behavioral Skills": "",
+        "Interests": "",
+        "Competency": "",
+        "Cognitive Preferences": "",
+        "Creative Inclinations": "",
+        "Exploration Interest": "",
+        "Future study intent": "",
+        "Cultural Exposure": "",
+        "Emerging Tech Awareness": "",
+        "Hobbies": "",
+        "Learning Agility": "",
+        "Life Skills": "",
+        "Motivation Drivers": "",
+        "Motivating Activities": "",
+        "Newly Acquired Skills": "",
+        "Organizational Skills": "",
+        "Personal Interests": "",
+        "Social Causes": "",
+        "Volunteering": "",
+        "Personality Traits": ""
+    }
+
+    # --- helper to fetch answers ---
+    async def fetch_answer(parameter: str, section: str):
+        ans_doc = await answers_collection.find_one(
+            {
+                "user_id": user_id,
+                "section": section,
+                "parameter": {"$regex": f".*{parameter}.*", "$options": "i"}
+            },
+            sort=[("created_at", DESCENDING)]
+        )
+        if ans_doc:
+            return (
+                ans_doc.get("selected_options")
+                or ans_doc.get("free_text")
+                or ans_doc.get("value")
+            )
+        return None
+
+    # --- Fill Talent Information missing fields from Cv Missing + Job Attributes ---
+    for field in talent_info:
+        if not talent_info[field] or talent_info[field] in ["", [], None]:
+            # first try Cv Missing
+            answer_val = await fetch_answer(field, "Cv Missing")
+            # then Job Attributes
+            if not answer_val:
+                answer_val = await fetch_answer(field, "Job Attributes")
+            if answer_val:
+                talent_info[field] = answer_val
+
+    # --- Fill Anchor Attributes always from answers ---
+    for field in anchor_attrs:
+        answer_val = await fetch_answer(field, "Anchor Attributes")
+        if answer_val:
+            anchor_attrs[field] = answer_val
+
+    return {
+        "success": True,
+        "Talent Information": talent_info,
+        "Anchor Attributes": anchor_attrs
+    }
+
+
+
+
+
 
 
 

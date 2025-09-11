@@ -89,6 +89,7 @@ class AnswerModel(BaseModel):
     parameter: str
     answer_type: str
     value: Optional[Union[str, List[str], Dict[str, str]]] = None
+    limit: Optional[int] = None  
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
