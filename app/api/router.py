@@ -21,6 +21,8 @@ from app.services.profile import (
     get_audience_questions_service,
     get_questions_excluding_parameters, get_questions_by_parameters
 )
+from app.utils.cv_extractor import generate_job_attribute_options
+import re
 
 import os
 import google.generativeai as genai
@@ -485,7 +487,6 @@ async def get_cv_profile_data(
 
     user_id = str(current_user.get("_id"))
 
-    # --- get latest cv upload ---
     query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
     cv_doc = await uploads_collection.find_one(
         query,
@@ -493,7 +494,6 @@ async def get_cv_profile_data(
     )
     parsed_data = cv_doc.get("parsed_data", {}) if cv_doc else {}
 
-    # --- Talent Information template ---
     talent_info = {
         "Education": parsed_data.get("Education", []),
         "Internships": parsed_data.get("Internships", []),
@@ -583,7 +583,140 @@ async def get_cv_profile_data(
         "Talent Information": talent_info,
         "Anchor Attributes": anchor_attrs
     }
+# ---- Function to generate a new dummy ObjectId ----
+def generate_dummy_user_id():
+    return ObjectId()
 
+@router.post("/extract-cv-no-auth")
+async def extract_cv_no_auth(
+    file: UploadFile = File(...),
+    db=Depends(get_database),
+):
+    # ---- Save file temporarily ----
+    with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+
+    # ---- Extract CV Data ----
+    data = extract_cv_data_from_file(tmp_path, file.content_type)
+    if "error" in data:
+        return {"message": "CV extraction failed", "error": data["error"]}
+
+    # ---- Generate dummy user_id (ObjectId) ----
+    dummy_user_id = generate_dummy_user_id()
+
+    # ---- Save extracted CV with dummy user_id ----
+    saved_cv = await save_extracted_cv_data(
+        user_id=str(dummy_user_id),
+        parsed_data=data,
+        file_path=tmp_path,
+        db=db
+    )
+    cv_id_str = str(saved_cv.get("_id"))
+
+    # ---- Generate missing skill suggestions ----
+    softskills_suggestions, technical_skills_suggestions = [], []
+    if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
+        try:
+            suggestions = await generate_missing_field_suggestions(data)
+        except Exception:
+            suggestions = {"softskills_suggestions": [], "technical_skills_suggestions": []}
+
+        softskills_suggestions = suggestions.get("softskills_suggestions", [])
+        technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
+
+    await save_skill_suggestions(
+        user_id=str(dummy_user_id),
+        cv_id=cv_id_str,
+        softskills=softskills_suggestions,
+        technical_skills=technical_skills_suggestions,
+        db=db
+    )
+
+    # ---- Generate only Job Attribute options ----
+    questions_collection = db["questions"]
+    questions_doc = await questions_collection.find_one({})
+    audience_type = predict_audience_type(data)
+
+    job_questions_with_options = []
+
+    if questions_doc:
+        job_attributes = questions_doc.get("Job attributes", [])
+        matching_job = next((item for item in job_attributes if item.get("audienceType") == audience_type), None)
+
+        if matching_job:
+            job_questions = matching_job.get("questions", [])
+            job_options = await generate_job_attribute_options(data, job_questions)
+            job_questions_with_options = job_options["suggestions"]
+
+        uploads_collection = db["uploads"]
+        await uploads_collection.update_one(
+            {"_id": saved_cv["_id"]},
+            {"$set": {
+                "audienceType": audience_type,
+                "job_questions_with_options": job_questions_with_options
+            }}
+        )
+
+    # ---- Create CV Summary ----
+    summary = await get_cv_summary(data)
+
+    # ---- Helper: parse duration string ----
+    def parse_duration(duration_str: str):
+        from dateutil import parser as date_parser
+        try:
+            parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
+            if len(parts) != 2:
+                return None
+            start_str, end_str = parts[0].strip(), parts[1].strip().lower()
+            start_date = date_parser.parse(start_str, fuzzy=True)
+            if any(x in end_str for x in ("present", "current", "ongoing")):
+                end_date = datetime.today()
+            else:
+                end_date = date_parser.parse(end_str, fuzzy=True)
+            return start_date, end_date
+        except Exception:
+            return None
+
+    # ---- Extract latest job role ----
+    job_role = None
+    latest_end = datetime.min
+    for job in data.get("WorkExperience", []) or []:
+        parsed = parse_duration(job.get("Duration", ""))
+        if parsed:
+            _, end = parsed
+            if end > latest_end:
+                latest_end = end
+                job_role = job.get("Role")
+
+    if not job_role and data.get("WorkExperience"):
+        raw_role = data["WorkExperience"][0].get("Role", "")
+        if raw_role:
+            job_role = raw_role.split("/")[0].split(",")[0].strip()
+
+    if not job_role and data.get("Summary"):
+        match = re.search(r"(?i)([A-Z][a-zA-Z\s\/\-]+)\s+with\s+\d+\s+years", data["Summary"])
+        if match:
+            job_role = match.group(1).strip()
+
+    # ---- Known/Unknown fields ratio ----
+    known_fields = len(summary.get("known", []))
+    unknown_fields = len(summary.get("unknown", []))
+    total_fields = known_fields + unknown_fields
+    known_percentage = round((known_fields / total_fields) * 100, 2) if total_fields else 0.0
+
+    return {
+        "parsed_data": data,
+        "summary": summary,
+        "audienceType": audience_type,
+        "candidate": {
+            "name": data.get("Name"),
+            "job_role": job_role,
+            "known_percentage": known_percentage
+        },
+        "dummy_user_id": str(dummy_user_id),
+        "message": "CV data extracted and saved successfully (no-auth)"
+    }
 
 
 

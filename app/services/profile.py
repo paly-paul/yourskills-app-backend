@@ -356,7 +356,6 @@ async def get_questions_excluding_parameters(
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
-    # Fetch the latest CV
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"]), "source": "cv"},
         sort=[("uploaded_at", -1)]
@@ -370,7 +369,6 @@ async def get_questions_excluding_parameters(
 
     normalized_excludes = [normalize_parameter(e) for e in exclude_params]
 
-    # Build upload_questions from existing anchor_questions_with_options
     upload_questions = []
     upload_params = set()
     for aq in latest_cv.get("anchor_questions_with_options", []):
@@ -382,19 +380,21 @@ async def get_questions_excluding_parameters(
 
         if included_params:
             upload_params.update(included_params)
-            upload_questions.append({
+            uq_obj = {
                 "parameters": included_params,
                 "question": aq.get("question"),
                 "type": aq.get("type"),
                 "options": aq.get("options", []),
                 "iconfilename": aq.get("iconfilename"),
-                "source": "uploads_collection"
-            })
+            }
+            if "Limit" in aq or "limit" in aq:
+                uq_obj["limit"] = aq.get("limit") or aq.get("Limit")
+
+            upload_questions.append(uq_obj)
 
         if len(upload_questions) >= 2:
             break
 
-    # Fetch questions from questions_collection
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -410,7 +410,6 @@ async def get_questions_excluding_parameters(
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
 
-    # Prepare results from questions_collection
     results = []
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
@@ -426,16 +425,18 @@ async def get_questions_excluding_parameters(
         if skip:
             continue
 
-        results.append({
+        q_obj = {
             "parameter": param,
             "question": cq.get("question"),
             "type": cq.get("type"),
             "options": cq.get("options", []),
             "iconfilename": cq.get("iconfilename"),
-            "source": "questions_collection"
-        })
+        }
+        if "Limit" in cq or "limit" in cq:
+            q_obj["limit"] = cq.get("limit") or cq.get("Limit")
 
-    # Generate options for target parameters and save to DB
+        results.append(q_obj)
+
     anchor_response = await generate_anchor_attribute_options(
         questions=results,
         model=model,
@@ -454,34 +455,6 @@ async def get_questions_excluding_parameters(
         if param in generated_map:
             q["options"] = generated_map[param]
 
-    # 🔑 Re-fetch latest CV to rebuild upload_questions including generated options
-    latest_cv = await uploads_collection.find_one({"_id": latest_cv["_id"]})
-
-    # Rebuild upload_questions strictly from CV, max 2
-    upload_questions = []
-    upload_params = set()
-    for aq in latest_cv.get("anchor_questions_with_options", []):
-        included_params = [
-            normalize_parameter(p)
-            for p in aq.get("parameters", [])
-            if normalize_parameter(p) not in normalized_excludes
-        ]
-
-        if included_params:
-            upload_params.update(included_params)
-            upload_questions.append({
-                "parameters": included_params,
-                "question": aq.get("question"),
-                "type": aq.get("type"),
-                "options": aq.get("options", []),
-                "iconfilename": aq.get("iconfilename"),
-                "source": "uploads_collection"
-            })
-
-        if len(upload_questions) >= 2:
-            break
-
-    # Filter results to exclude any already in upload_questions
     results = [
         q for q in results
         if not any(
@@ -497,10 +470,4 @@ async def get_questions_excluding_parameters(
         "questions": results,
         "upload_questions": upload_questions
     }
-
-
-
-
-
-
 
