@@ -348,9 +348,8 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
 async def get_questions_excluding_parameters(
     db, current_user, attribute_type: str, exclude_params: list, model, get_database
 ):
-    """Fetch up to two questions from uploads collection (CV),
-    then fetch questions from questions collection excluding
-    given parameters and any already in uploads.
+    """Fetch questions from uploads collection (CV) and questions collection,
+    excluding given parameters and any duplicates. Returns merged list.
     """
 
     uploads_collection = db["uploads"]
@@ -369,19 +368,36 @@ async def get_questions_excluding_parameters(
 
     normalized_excludes = [normalize_parameter(e) for e in exclude_params]
 
+    # -------------------
+    # 1. Upload Questions
+    # -------------------
     upload_questions = []
     upload_params = set()
+
     for aq in latest_cv.get("anchor_questions_with_options", []):
+        raw_param = aq.get("parameter") or aq.get("parameters", [])
+
+        # Normalize raw_param into a list
+        if isinstance(raw_param, str):
+            raw_param_list = [p.strip() for p in raw_param.split("+") if p.strip()]
+        elif isinstance(raw_param, list):
+            raw_param_list = [p.strip() for p in raw_param if p.strip()]
+        else:
+            raw_param_list = []
+
+        # Filter out excluded params
         included_params = [
             normalize_parameter(p)
-            for p in aq.get("parameters", [])
+            for p in raw_param_list
             if normalize_parameter(p) not in normalized_excludes
         ]
 
         if included_params:
-            upload_params.update(included_params)
+            param_str = " + ".join(included_params)  # force into string
+            upload_params.add(param_str)
+
             uq_obj = {
-                "parameters": included_params,
+                "parameter": param_str,
                 "question": aq.get("question"),
                 "type": aq.get("type"),
                 "options": aq.get("options", []),
@@ -392,9 +408,9 @@ async def get_questions_excluding_parameters(
 
             upload_questions.append(uq_obj)
 
-        if len(upload_questions) >= 2:
-            break
-
+    # -------------------------
+    # 2. Questions Collection
+    # -------------------------
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -412,21 +428,25 @@ async def get_questions_excluding_parameters(
 
     results = []
     for cq in matching_entry.get("questions", []):
-        param = normalize_parameter(cq.get("parameter"))
+        param_str = cq.get("parameter")
 
-        if param in normalized_excludes:
+        # normalize to compare with excludes
+        norm_param = normalize_parameter(param_str)
+
+        if norm_param in normalized_excludes:
             continue
 
+        # skip if this param already exists in uploads
         skip = False
         for up in upload_params:
-            if up in param or param in up:
+            if normalize_parameter(up) == norm_param:
                 skip = True
                 break
         if skip:
             continue
 
         q_obj = {
-            "parameter": param,
+            "parameter": param_str,
             "question": cq.get("question"),
             "type": cq.get("type"),
             "options": cq.get("options", []),
@@ -437,6 +457,9 @@ async def get_questions_excluding_parameters(
 
         results.append(q_obj)
 
+    # --------------------
+    # 3. Generate Options
+    # --------------------
     anchor_response = await generate_anchor_attribute_options(
         questions=results,
         model=model,
@@ -447,27 +470,39 @@ async def get_questions_excluding_parameters(
     generated_map = {
         normalize_parameter(p): suggestion.get("options", [])
         for suggestion in anchor_response.get("suggestions", [])
-        for p in suggestion.get("parameters", [])
+        for p in suggestion.get("parameter", [])
     }
 
     for q in results:
-        param = normalize_parameter(q["parameter"])
-        if param in generated_map:
-            q["options"] = generated_map[param]
+        if normalize_parameter(q["parameter"]) in generated_map:
+            q["options"] = generated_map[normalize_parameter(q["parameter"])]
 
-    results = [
-        q for q in results
-        if not any(
-            up in normalize_parameter(q["parameter"]) or normalize_parameter(q["parameter"]) in up
-            for up in upload_params
-        )
-    ]
+    # -----------------------
+    # 4. Merge & Deduplicate
+    # -----------------------
+    final_questions = []
+    seen_params = set()
 
+    # Add upload questions first
+    for uq in upload_questions:
+        norm = normalize_parameter(uq["parameter"])
+        if norm not in seen_params:
+            final_questions.append(uq)
+            seen_params.add(norm)
+
+    # Then add from questions collection
+    for q in results:
+        norm = normalize_parameter(q["parameter"])
+        if norm not in seen_params:
+            final_questions.append(q)
+            seen_params.add(norm)
+
+    # -------------------
+    # Final Response
+    # -------------------
     return {
         "success": True,
         "audienceType": audience_type,
         "cv_id": cv_id,
-        "questions": results,
-        "upload_questions": upload_questions
+        "questions": final_questions
     }
-

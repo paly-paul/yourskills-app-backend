@@ -248,12 +248,26 @@ async def get_missing_field_questions(
     return await get_missing_field_questions_service(section, db, current_user)
 
 
+# @router.get("/job-questions")
+# async def get_audience_questions(
+#     db=Depends(get_database),
+#     current_user=Depends(get_current_user)
+# ):
+#     return await get_audience_questions_service(db, current_user)
 @router.get("/job-questions")
 async def get_audience_questions(
     db=Depends(get_database),
     current_user=Depends(get_current_user)
 ):
-    return await get_audience_questions_service(db, current_user)
+    response = await get_audience_questions_service(db, current_user)
+
+    # Ensure 'questions' exists in respons
+    if "questions" in response and isinstance(response["questions"], list):
+        for q in response["questions"]:
+            if "parameter" in q and isinstance(q["parameter"], list):
+                q["parameter"] = "+".join(str(p) for p in q["parameter"])
+
+    return response
 
 @router.get("/anchor-questions/parameters")
 async def get_anchor_questions_by_parameters(
@@ -517,8 +531,6 @@ async def get_cv_profile_data(
         "Career Objective": parsed_data.get("Summary"),
         "Career Interest Areas": ""
     }
-
-    # --- Anchor Attributes template ---
     anchor_attrs = {
         "Achievements": "",
         "Behavioral Skills": "",
@@ -543,7 +555,6 @@ async def get_cv_profile_data(
         "Personality Traits": ""
     }
 
-    # --- helper to fetch answers ---
     async def fetch_answer(parameter: str, section: str):
         ans_doc = await answers_collection.find_one(
             {
@@ -561,18 +572,16 @@ async def get_cv_profile_data(
             )
         return None
 
-    # --- Fill Talent Information missing fields from Cv Missing + Job Attributes ---
     for field in talent_info:
         if not talent_info[field] or talent_info[field] in ["", [], None]:
-            # first try Cv Missing
+
             answer_val = await fetch_answer(field, "Cv Missing")
-            # then Job Attributes
+
             if not answer_val:
                 answer_val = await fetch_answer(field, "Job Attributes")
             if answer_val:
                 talent_info[field] = answer_val
 
-    # --- Fill Anchor Attributes always from answers ---
     for field in anchor_attrs:
         answer_val = await fetch_answer(field, "Anchor Attributes")
         if answer_val:
@@ -583,7 +592,6 @@ async def get_cv_profile_data(
         "Talent Information": talent_info,
         "Anchor Attributes": anchor_attrs
     }
-# ---- Function to generate a new dummy ObjectId ----
 def generate_dummy_user_id():
     return ObjectId()
 
@@ -592,20 +600,16 @@ async def extract_cv_no_auth(
     file: UploadFile = File(...),
     db=Depends(get_database),
 ):
-    # ---- Save file temporarily ----
     with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    # ---- Extract CV Data ----
     data = extract_cv_data_from_file(tmp_path, file.content_type)
     if "error" in data:
         return {"message": "CV extraction failed", "error": data["error"]}
 
-    # ---- Generate dummy user_id (ObjectId) ----
     dummy_user_id = generate_dummy_user_id()
 
-    # ---- Save extracted CV with dummy user_id ----
     saved_cv = await save_extracted_cv_data(
         user_id=str(dummy_user_id),
         parsed_data=data,
@@ -614,7 +618,6 @@ async def extract_cv_no_auth(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    # ---- Generate missing skill suggestions ----
     softskills_suggestions, technical_skills_suggestions = [], []
     if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
         try:
@@ -632,8 +635,6 @@ async def extract_cv_no_auth(
         technical_skills=technical_skills_suggestions,
         db=db
     )
-
-    # ---- Generate only Job Attribute options ----
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
@@ -658,10 +659,8 @@ async def extract_cv_no_auth(
             }}
         )
 
-    # ---- Create CV Summary ----
     summary = await get_cv_summary(data)
 
-    # ---- Helper: parse duration string ----
     def parse_duration(duration_str: str):
         from dateutil import parser as date_parser
         try:
@@ -678,7 +677,6 @@ async def extract_cv_no_auth(
         except Exception:
             return None
 
-    # ---- Extract latest job role ----
     job_role = None
     latest_end = datetime.min
     for job in data.get("WorkExperience", []) or []:
@@ -699,7 +697,6 @@ async def extract_cv_no_auth(
         if match:
             job_role = match.group(1).strip()
 
-    # ---- Known/Unknown fields ratio ----
     known_fields = len(summary.get("known", []))
     unknown_fields = len(summary.get("unknown", []))
     total_fields = known_fields + unknown_fields

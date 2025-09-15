@@ -411,9 +411,10 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
 async def generate_job_attribute_options(cv_context: dict, questions_from_db: list) -> dict:
     """
     Generates multiple-choice options for each job attribute question.
-    Each parameter contributes exactly 5 options, unless a `limit` is specified in the question.
+    Each parameter contributes exactly 5 options.
     If the parameter string has multiple joined with '+', 
-    total options = 5 * number_of_parameters (or capped by limit).
+    total options = 5 * number_of_parameters.
+    NOTE: limit is ignored for generation, but preserved in output.
     """
     results = []
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
@@ -429,12 +430,8 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
         parameter_list = [p.strip() for p in parameter.split("+")]
 
-        # Default option count
+        # Always base count on 5 * number of parameters (ignore limit)
         option_count = 5 * len(parameter_list)
-
-        # Apply limit if provided
-        if isinstance(limit, int) and limit > 0:
-            option_count = min(option_count, limit)
 
         labels = [chr(65 + i) for i in range(option_count)]
 
@@ -475,7 +472,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
                 formatted_options.append(opt_text)
 
             result_item = {
-                "parameters": parameter_list,
+                "parameter": parameter_list,
                 "question": question_text,
                 "type": qtype,
                 "iconfilename": iconfilename,
@@ -488,7 +485,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
 
         except Exception:
             result_item = {
-                "parameters": parameter_list,
+                "parameter": parameter_list,
                 "question": question_text,
                 "type": qtype,
                 "iconfilename": iconfilename,
@@ -503,6 +500,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         "success": True,
         "suggestions": results
     }
+
 
 
 
@@ -675,7 +673,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
                 formatted.append(opt)
 
             suggestions.append({
-                "parameters": parameter_list,
+                "parameter": parameter_list,
                 "question": question_text,
                 "type": type_,
                 "iconfilename": iconfilename,
@@ -684,7 +682,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
 
         except Exception as e:
             suggestions.append({
-                "parameters": parameter_list,
+                "parameter": parameter_list,
                 "question": question_text,
                 "type": type_,
                 "iconfilename": iconfilename,
