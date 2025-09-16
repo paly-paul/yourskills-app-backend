@@ -8,64 +8,6 @@ from app.services.cv_comparison import get_cv_summary
 import json
 
 
-# async def get_profile_summary_service(db, current_user):
-#     uploads_collection = db["uploads"]
-#     user_id = str(current_user.get("_id"))
-
-#     query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
-#     latest_upload = await uploads_collection.find_one(
-#         query,
-#         sort=[("uploaded_at", DESCENDING)]
-#     )
-#     if not latest_upload:
-#         raise HTTPException(status_code=404, detail="No CV uploaded yet")
-
-#     parsed_data = latest_upload.get("parsed_data", {}) or {}
-
-#     work_experiences = parsed_data.get("WorkExperience", []) or []
-#     def parse_duration(duration_str: str):
-#         import re
-#         from dateutil import parser as date_parser
-#         try:
-#             parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
-#             if len(parts) != 2:
-#                 return None
-#             start_str, end_str = parts[0].strip(), parts[1].strip().lower()
-#             start_date = date_parser.parse(start_str, fuzzy=True)
-#             if any(x in end_str for x in ("present", "current", "ongoing")):
-#                 end_date = datetime.today()
-#             else:
-#                 end_date = date_parser.parse(end_str, fuzzy=True)
-#             return start_date, end_date
-#         except Exception:
-#             return None
-
-#     job_role = None
-#     latest_end = datetime.min
-#     for job in work_experiences:
-#         parsed = parse_duration(job.get("Duration", ""))
-#         if parsed:
-#             _, end = parsed
-#             if end > latest_end:
-#                 latest_end = end
-#                 job_role = job.get("Role")
-
-#     summary = await get_cv_summary(parsed_data)
-#     known_fields = len(summary.get("known", []))
-#     unknown_fields = len(summary.get("unknown", []))
-#     total_fields = known_fields + unknown_fields
-
-#     known_percentage = round((known_fields / total_fields) * 100, 2) if total_fields else 0.0
-
-#     return {
-#         "candidate": {
-#             "name": parsed_data.get("Name"),
-#             "job_role": job_role,
-#             "audience_type": predict_audience_type(parsed_data),
-#             "known_percentage": known_percentage
-#         }
-#     }
-
 
 async def get_missing_field_questions_service(section: str, db, current_user):
     uploads_collection = db["uploads"]
@@ -223,76 +165,6 @@ def normalize_parameter(param):
         return " + ".join(param)
     return param
 
-# async def get_questions_by_audience(db, current_user, attribute_type: str):
-#     """Fetch questions based on audience type and attribute category (Job/Anchor).
-#        Two parameters come from uploads (with options), rest from questions collection.
-#     """
-#     uploads_collection = db["uploads"]
-#     questions_collection = db["questions"]
-
-#     latest_cv = await uploads_collection.find_one(
-#         {"user_id": ObjectId(current_user["_id"])},
-#         sort=[("_id", -1)]
-#     )
-#     if not latest_cv or "parsed_data" not in latest_cv:
-#         raise HTTPException(status_code=404, detail="No CV data found for this user")
-
-#     parsed_data = latest_cv["parsed_data"]
-
-#     audience_type = predict_audience_type(parsed_data)
-
-#     questions_doc = await questions_collection.find_one({})
-#     if not questions_doc:
-#         raise HTTPException(status_code=404, detail="No questions collection found")
-
-#     attributes = questions_doc.get(attribute_type, [])
-#     matching_entry = next(
-#         (item for item in attributes if item.get("audienceType") == audience_type),
-#         None
-#     )
-#     if not matching_entry:
-#         raise HTTPException(
-#             status_code=404,
-#             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
-#         )
-
-#     results = []
-
-#     special_params = [
-#         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-#         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
-#     ]
-
-#     upload_questions = latest_cv.get("anchor_questions_with_options", [])
-#     for uq in upload_questions:
-#         param = normalize_parameter(uq.get("parameters"))
-#         if param in special_params:
-#             results.append({
-#                 "parameter": param,
-#                 "question": uq.get("question"),
-#                 "type": uq.get("type"),
-#                 "options": uq.get("options", []),
-#                 "iconfilename": uq.get("iconfilename"),
-#                 "source": "uploads"
-#             })
-
-#     for cq in matching_entry.get("questions", []):
-#         param = normalize_parameter(cq.get("parameter"))
-#         if param not in [r["parameter"] for r in results]: 
-#             results.append({
-#                 "parameter": param,
-#                 "question": cq.get("question"),
-#                 "type":cq.get("type"),
-#                 "options": cq.get("options", []),
-#                 "iconfilename": cq.get("iconfilename"),
-#                 "source": "questions_collection"
-#             })
-
-#     return {
-#         "success": True,
-#         "audienceType": audience_type,
-#         "questions": results,
-#     }
 
 
 async def get_questions_by_parameters(db, current_user, attribute_type: str, parameters: list):
@@ -355,7 +227,6 @@ async def get_questions_excluding_parameters(
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
-    # Fetch latest CV
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"]), "source": "cv"},
         sort=[("uploaded_at", -1)]
@@ -367,10 +238,8 @@ async def get_questions_excluding_parameters(
     cv_id = str(latest_cv["_id"])
     audience_type = predict_audience_type(parsed_data)
 
-    # Normalize excludes
     normalized_excludes = [normalize_parameter(e) for e in exclude_params]
 
-    # --- Collect system questions first, always needed ---
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -397,27 +266,23 @@ async def get_questions_excluding_parameters(
             "question": cq.get("question"),
             "type": cq.get("type"),
             "options": cq.get("options", []),
-            "iconfilename": cq.get("iconfilename"),
-            "source": "system"
+            "iconfilename": cq.get("iconfilename")
         }
         if "limit" in cq or "Limit" in cq:
             sq_obj["limit"] = cq.get("limit") or cq.get("Limit")
 
         system_questions.append(sq_obj)
-
-    # --- Check if questions have already been generated and saved ---
     if "anchor_questions_with_options" not in latest_cv:
-        # If not, generate options and save them. This is the "first click" logic.
+
         await generate_anchor_attribute_options(
             user_id=str(current_user["_id"]),
-            questions=system_questions,  # Pass system questions to be populated
+            questions=system_questions, 
             model=model,
             get_database=get_database
         )
-        # Refresh the latest_cv document to get the new data
+
         latest_cv = await uploads_collection.find_one({"_id": latest_cv["_id"]})
 
-    # --- Now, regardless of whether it's the first or a subsequent click, fetch the questions ---
     upload_questions = []
     for aq in latest_cv.get("anchor_questions_with_options", []):
         params = aq.get("parameter", [])
@@ -437,8 +302,7 @@ async def get_questions_excluding_parameters(
             "question": aq.get("question"),
             "type": aq.get("type"),
             "options": aq.get("options", []),
-            "iconfilename": aq.get("iconfilename"),
-            "source": "upload"
+            "iconfilename": aq.get("iconfilename")
         }
         if "limit" in aq or "Limit" in aq:
             uq_obj["limit"] = aq.get("limit") or aq.get("Limit")
@@ -447,7 +311,6 @@ async def get_questions_excluding_parameters(
         if len(upload_questions) >= 2:
             break
 
-    # --- Merge uploads + system ---
     upload_params = {normalize_parameter(q["parameter"]) for q in upload_questions}
     merged_questions = upload_questions + [
         q for q in system_questions

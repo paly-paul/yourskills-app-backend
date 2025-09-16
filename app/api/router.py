@@ -235,10 +235,6 @@ async def extract_cv(
     }
 
 
-
-
-
-
 @router.get("/missing_questions")
 async def get_missing_field_questions(
     section: str = "Cv Missing",
@@ -248,12 +244,6 @@ async def get_missing_field_questions(
     return await get_missing_field_questions_service(section, db, current_user)
 
 
-# @router.get("/job-questions")
-# async def get_audience_questions(
-#     db=Depends(get_database),
-#     current_user=Depends(get_current_user)
-# ):
-#     return await get_audience_questions_service(db, current_user)
 @router.get("/job-questions")
 async def get_audience_questions(
     db=Depends(get_database),

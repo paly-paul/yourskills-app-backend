@@ -425,12 +425,10 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         qtype = q.get("type")
         iconfilename = q.get("iconfilename")
 
-        # handle both "limit" and "Limit"
         limit = q.get("limit") or q.get("Limit")
 
         parameter_list = [p.strip() for p in parameter.split("+")]
 
-        # Always base count on 5 * number of parameters (ignore limit)
         option_count = 5 * len(parameter_list)
 
         labels = [chr(65 + i) for i in range(option_count)]
@@ -478,7 +476,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
                 "iconfilename": iconfilename,
                 "options": formatted_options
             }
-            if limit is not None:  # only include if it was in input
+            if limit is not None:
                 result_item["limit"] = limit
 
             results.append(result_item)
@@ -500,42 +498,6 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         "success": True,
         "suggestions": results
     }
-
-
-
-
-
-
-# def clean_llm_json_response(text: str) -> str:
-#     start = text.find("{")
-#     end = text.rfind("}")
-#     if start == -1 or end == -1:
-#         return text
-#     return text[start:end+1]
-
-# async def fetch_latest_anchor_answers(db, cv_id: str) -> dict:
-#     answers_col = db["answers"]
-
-#     base_parameters = [
-#         "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-#         "Achievements"
-#     ]
-
-#     cursor = answers_col.find(
-#         {"cv_id": cv_id, "parameter": {"$in": base_parameters}},
-#         {"parameter": 1, "free_text": 1, "created_at": 1, "_id": 0}
-#     ).sort("created_at", -1)
-
-#     results = await cursor.to_list(length=None)
-
-#     latest_answers = {}
-#     for ans in results:
-#         param = ans["parameter"]
-#         if param not in latest_answers:  
-#             latest_answers[param] = ans.get("free_text", "")
-
-#     return latest_answers
-
 
 
 
