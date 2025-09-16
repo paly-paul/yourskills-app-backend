@@ -348,13 +348,14 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
 async def get_questions_excluding_parameters(
     db, current_user, attribute_type: str, exclude_params: list, model, get_database
 ):
-    """Fetch questions from uploads collection (CV) and questions collection,
-    excluding given parameters and any duplicates. Returns merged list.
     """
-
+    Always run option generation first, then merge uploads + system,
+    keeping uploads no matter what, and suppressing only system duplicates.
+    """
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
 
+    # Fetch latest CV
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"]), "source": "cv"},
         sort=[("uploaded_at", -1)]
@@ -366,51 +367,10 @@ async def get_questions_excluding_parameters(
     cv_id = str(latest_cv["_id"])
     audience_type = predict_audience_type(parsed_data)
 
+    # Normalize excludes
     normalized_excludes = [normalize_parameter(e) for e in exclude_params]
 
-    # -------------------
-    # 1. Upload Questions
-    # -------------------
-    upload_questions = []
-    upload_params = set()
-
-    for aq in latest_cv.get("anchor_questions_with_options", []):
-        raw_param = aq.get("parameter") or aq.get("parameters", [])
-
-        # Normalize raw_param into a list
-        if isinstance(raw_param, str):
-            raw_param_list = [p.strip() for p in raw_param.split("+") if p.strip()]
-        elif isinstance(raw_param, list):
-            raw_param_list = [p.strip() for p in raw_param if p.strip()]
-        else:
-            raw_param_list = []
-
-        # Filter out excluded params
-        included_params = [
-            normalize_parameter(p)
-            for p in raw_param_list
-            if normalize_parameter(p) not in normalized_excludes
-        ]
-
-        if included_params:
-            param_str = " + ".join(included_params)  # force into string
-            upload_params.add(param_str)
-
-            uq_obj = {
-                "parameter": param_str,
-                "question": aq.get("question"),
-                "type": aq.get("type"),
-                "options": aq.get("options", []),
-                "iconfilename": aq.get("iconfilename"),
-            }
-            if "Limit" in aq or "limit" in aq:
-                uq_obj["limit"] = aq.get("limit") or aq.get("Limit")
-
-            upload_questions.append(uq_obj)
-
-    # -------------------------
-    # 2. Questions Collection
-    # -------------------------
+    # --- Collect system questions first, always needed ---
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -426,83 +386,77 @@ async def get_questions_excluding_parameters(
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
 
-    results = []
+    system_questions = []
     for cq in matching_entry.get("questions", []):
-        param_str = cq.get("parameter")
-
-        # normalize to compare with excludes
-        norm_param = normalize_parameter(param_str)
-
-        if norm_param in normalized_excludes:
+        param = normalize_parameter(cq.get("parameter"))
+        if param in normalized_excludes:
             continue
 
-        # skip if this param already exists in uploads
-        skip = False
-        for up in upload_params:
-            if normalize_parameter(up) == norm_param:
-                skip = True
-                break
-        if skip:
-            continue
-
-        q_obj = {
-            "parameter": param_str,
+        sq_obj = {
+            "parameter": param,
             "question": cq.get("question"),
             "type": cq.get("type"),
             "options": cq.get("options", []),
             "iconfilename": cq.get("iconfilename"),
+            "source": "system"
         }
-        if "Limit" in cq or "limit" in cq:
-            q_obj["limit"] = cq.get("limit") or cq.get("Limit")
+        if "limit" in cq or "Limit" in cq:
+            sq_obj["limit"] = cq.get("limit") or cq.get("Limit")
 
-        results.append(q_obj)
+        system_questions.append(sq_obj)
 
-    # --------------------
-    # 3. Generate Options
-    # --------------------
-    anchor_response = await generate_anchor_attribute_options(
-        questions=results,
-        model=model,
-        get_database=get_database,
-        user_id=str(current_user["_id"])
-    )
+    # --- Check if questions have already been generated and saved ---
+    if "anchor_questions_with_options" not in latest_cv:
+        # If not, generate options and save them. This is the "first click" logic.
+        await generate_anchor_attribute_options(
+            user_id=str(current_user["_id"]),
+            questions=system_questions,  # Pass system questions to be populated
+            model=model,
+            get_database=get_database
+        )
+        # Refresh the latest_cv document to get the new data
+        latest_cv = await uploads_collection.find_one({"_id": latest_cv["_id"]})
 
-    generated_map = {
-        normalize_parameter(p): suggestion.get("options", [])
-        for suggestion in anchor_response.get("suggestions", [])
-        for p in suggestion.get("parameter", [])
-    }
+    # --- Now, regardless of whether it's the first or a subsequent click, fetch the questions ---
+    upload_questions = []
+    for aq in latest_cv.get("anchor_questions_with_options", []):
+        params = aq.get("parameter", [])
+        if isinstance(params, str):
+            params = [params]
 
-    for q in results:
-        if normalize_parameter(q["parameter"]) in generated_map:
-            q["options"] = generated_map[normalize_parameter(q["parameter"])]
+        included = [
+            normalize_parameter(p)
+            for p in params
+            if normalize_parameter(p) not in normalized_excludes
+        ]
+        if not included:
+            continue
 
-    # -----------------------
-    # 4. Merge & Deduplicate
-    # -----------------------
-    final_questions = []
-    seen_params = set()
+        uq_obj = {
+            "parameter": " + ".join(included),
+            "question": aq.get("question"),
+            "type": aq.get("type"),
+            "options": aq.get("options", []),
+            "iconfilename": aq.get("iconfilename"),
+            "source": "upload"
+        }
+        if "limit" in aq or "Limit" in aq:
+            uq_obj["limit"] = aq.get("limit") or aq.get("Limit")
 
-    # Add upload questions first
-    for uq in upload_questions:
-        norm = normalize_parameter(uq["parameter"])
-        if norm not in seen_params:
-            final_questions.append(uq)
-            seen_params.add(norm)
+        upload_questions.append(uq_obj)
+        if len(upload_questions) >= 2:
+            break
 
-    # Then add from questions collection
-    for q in results:
-        norm = normalize_parameter(q["parameter"])
-        if norm not in seen_params:
-            final_questions.append(q)
-            seen_params.add(norm)
+    # --- Merge uploads + system ---
+    upload_params = {normalize_parameter(q["parameter"]) for q in upload_questions}
+    merged_questions = upload_questions + [
+        q for q in system_questions
+        if normalize_parameter(q["parameter"]) not in upload_params
+    ]
 
-    # -------------------
-    # Final Response
-    # -------------------
     return {
         "success": True,
         "audienceType": audience_type,
         "cv_id": cv_id,
-        "questions": final_questions
+        "questions": merged_questions
     }
