@@ -92,6 +92,18 @@ class AnswerModel(BaseModel):
     limit: Optional[int] = None  
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+class AnswerWithoutCvModel(BaseModel):
+    id: str = Field(default_factory=generate_uuid, alias="_id")
+    user_id: str
+    tenant_id: str
+    section: str
+    parameter: str
+    answer_type: str
+    value: Optional[Union[str, List[str], Dict[str, str]]] = None
+    limit: Optional[int] = None  
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 
 
 

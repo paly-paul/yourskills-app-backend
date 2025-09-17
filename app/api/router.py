@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.db.database import get_database
 from app.schemas import UserCreate, UserLogin, ForgotPasswordRequest, AnswersSubmit
-from app.services.user import create_user, get_user_by_email, forgot_password, save_extracted_cv_data, save_latest_cv_answers
+from app.services.user import create_user, get_user_by_email, forgot_password, save_extracted_cv_data, save_latest_cv_answers, save_answers_without_cv
 from app.utils import verify_password
 from app.utils.cv_extractor import extract_cv_data_from_file, predict_audience_type, generate_missing_field_suggestions
 from app.utils.token import create_access_token, get_current_user
@@ -251,7 +251,6 @@ async def get_audience_questions(
 ):
     response = await get_audience_questions_service(db, current_user)
 
-    # Ensure 'questions' exists in respons
     if "questions" in response and isinstance(response["questions"], list):
         for q in response["questions"]:
             if "parameter" in q and isinstance(q["parameter"], list):
@@ -480,6 +479,42 @@ async def get_latest_cv_details(
 
 
     return {"success": True, "cv_details": formatted_data}
+
+
+
+# ------- Second Flow Endpints( Without cv/) -------
+
+@router.get("/cv-missing-questions")
+async def get_cv_missing_questions(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Fetch all questions from the 'Cv Missing' section of the questions collection
+    """
+    questions_collection = db["questions"]
+
+    # Fetch the first document (or you can filter by tenant_id if needed)
+    questions_doc = await questions_collection.find_one({}, {"Cv Missing": 1, "_id": 0})
+
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail="No questions found")
+
+    return {"questions": questions_doc.get("Cv Missing", [])}
+
+@router.post("/answers/without-cv")
+async def submit_answers_without_cv(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    answers = payload.get("answers", [])
+    return await save_answers_without_cv(db, current_user, "Cv Missing", answers)
+
+
+
+
+
 
 @router.get("/cv/profile-data")
 async def get_cv_profile_data(

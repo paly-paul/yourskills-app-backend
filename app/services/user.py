@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from app.utils.hash import hash_password, generate_temp_password, generate_tenant_id
 from app.schemas.user import AnswerCreate
-from app.models.user import generate_uuid, AnswerModel 
+from app.models.user import generate_uuid, AnswerModel, AnswerWithoutCvModel
 
 async def create_user(db: AsyncIOMotorDatabase, user: Dict[str, Any]) -> Dict[str, Any]:
     tenant_id = generate_tenant_id()
@@ -154,4 +154,53 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
 
 
 
+async def save_answers_without_cv(
+    db, current_user: dict, section: str, answers: list
+):
+    """
+    Save answers that are not linked to any CV.
+    Stored in 'answers_without_cv' collection.
+    """
+    user_id = current_user.get("id") or current_user.get("_id")
 
+    try:
+        user_id = ObjectId(str(user_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    answer_docs = []
+    for ans in answers:
+        answer_type = ans.get("answer_type", "Short text + Edit view")
+        value = ans.get("value")
+        limit = ans.get("limit")
+
+        if answer_type == "Multi-select + limit":
+            if limit is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Parameter '{ans['parameter']}' requires a 'limit' value"
+                )
+            if isinstance(value, list) and len(value) > limit:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Too many selections for parameter '{ans['parameter']}'. "
+                           f"Allowed: {limit}, Provided: {len(value)}"
+                )
+
+        answer_docs.append(
+            AnswerWithoutCvModel(
+                user_id=str(user_id),
+                tenant_id=str(current_user.get("tenant_id")),
+                section=section,
+                parameter=ans["parameter"],
+                answer_type=answer_type,
+                value=value,
+                limit=limit,
+                created_at=datetime.utcnow()
+            ).dict(by_alias=True)
+        )
+
+    if answer_docs:
+        await db["answers_without_cv"].insert_many(answer_docs)  # ✅ separate collection
+
+    return {"message": "Answers saved successfully (without CV)"}

@@ -1,21 +1,19 @@
 {
   "answers": [
-{
+    {
       "parameter": "Education",
       "answer_type": "Single-select + Dropdown",
       "value": {
-            "selected": "Bachelor's",
-            "selectedField": "B.Sc. Computer Science / IT / Data Science"
-        }
-
+        "selected": "Bachelor's",
+        "selectedField": "B.Sc. Computer Science / IT / Data Science"
+      }
     },
-     {
+    {
       "parameter": "Experience",
       "answer_type": "Short text",
       "value": "Software Engineer - IT, Business Analyst - Finance, Marketing Intern - Advertising"
-      
     },
-  {
+    {
       "parameter": "Technical Skills",
       "answer_type": "Multi-select + Add New",
       "value": [
@@ -26,57 +24,57 @@
         "Figma"
       ]
     },
-     {
+    {
       "parameter": "Soft Skills",
       "answer_type": "Multi-select + Add New",
       "value": [
-        "CRM platforms",
-        "Project management",
-        "Data tools",
-        "Python",
-        "Figma"
+        "Leadership",
+        "Communication",
+        "Problem-solving",
+        "Adaptability",
+        "Teamwork"
       ]
-     },
-   
-     "parameter": "Certifications",
-      "answer_type": "Multiple select + add Tag",
+    },
+    {
+      "parameter": "Certifications",
+      "answer_type": "Multiple select + Add Tag",
       "value": [
-        "CRM platforms",
-        "Project management",
-        "Data tools",
-        "Python",
-        "Figma"
+        "AWS Certified Solutions Architect",
+        "PMP",
+        "Google Data Analytics",
+        "Salesforce Administrator",
+        "Scrum Master"
       ]
-     },
-     {
+    },
+    {
       "parameter": "Salary Grades",
       "answer_type": "Single Select",
       "value": "₹35L+ / $70K+"
     },
     {
-    "parameter": "Projects:",
-      "answer_type": "Multiple select + add Tag",
+      "parameter": "Projects",
+      "answer_type": "Multiple select + Add Tag",
       "value": [
-        "CRM platforms",
-        "Project management",
-        "Data tools",
-        "Python",
-        "Figma"
+        "CRM Implementation",
+        "Market Analysis Dashboard",
+        "Predictive Analytics Model",
+        "Process Automation Tool",
+        "UI/UX Design Prototype"
       ]
-     },
-     {
+    },
+    {
       "parameter": "Languages Known",
-      "answer_type": "Multi-select + Dropdown,
-       "value": [
-            "English",
-            "German"
-        ]
-       },
-       {
+      "answer_type": "Multi-select + Dropdown",
+      "value": [
+        "English",
+        "German"
+      ]
+    },
+    {
       "parameter": "Career Objective",
       "answer_type": "Short text",
-      "value": "Passionate about new things"
-      
+      "value": "Passionate about learning new technologies and applying them to create impactful solutions."
     }
   ]
 }
+
