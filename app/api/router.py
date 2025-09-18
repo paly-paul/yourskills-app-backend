@@ -484,6 +484,43 @@ async def get_latest_cv_details(
 
 # ------- Second Flow Endpints( Without cv/) -------
 
+# ---------- NEW API TO PROCEED WITHOUT CV ----------
+@router.post("/proceed-without-cv")
+async def proceed_without_cv(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Store the selected audience_type when user proceeds without uploading a CV
+    in a separate collection.
+    """
+    audience_type = payload.get("audienceType")
+    if not audience_type:
+        raise HTTPException(status_code=400, detail="audienceType is required")
+
+    user_id = str(current_user.get("_id"))
+    proceed_collection = db["proceed_without_cv"]  
+
+    doc = {
+        "user_id": user_id,
+        "audienceType": audience_type,
+        "created_at": datetime.utcnow(),
+        "source": "without_cv"
+    }
+
+    result = await proceed_collection.insert_one(doc)
+
+    return {
+        "success": True,
+        "message": "Audience type stored successfully (without CV)",
+        "data": {
+            "audienceType": audience_type,
+            "user_id": user_id,
+            "doc_id": str(result.inserted_id)
+        }
+    }
+
 @router.get("/cv-missing-questions")
 async def get_cv_missing_questions(
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -502,6 +539,7 @@ async def get_cv_missing_questions(
 
     return {"questions": questions_doc.get("Cv Missing", [])}
 
+
 @router.post("/answers/without-cv")
 async def submit_answers_without_cv(
     payload: dict,
@@ -510,9 +548,6 @@ async def submit_answers_without_cv(
 ):
     answers = payload.get("answers", [])
     return await save_answers_without_cv(db, current_user, "Cv Missing", answers)
-
-
-
 
 
 
