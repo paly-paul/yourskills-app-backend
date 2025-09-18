@@ -3,7 +3,7 @@ from bson import ObjectId
 from pymongo import DESCENDING
 from datetime import datetime
 from app.utils.cv_extractor import predict_audience_type
-from app.utils.cv_extractor import generate_missing_field_suggestions, generate_anchor_attribute_options
+from app.utils.cv_extractor import generate_missing_field_suggestions, generate_anchor_attribute_options, generate_anchor_options_from_answers_without_cv
 from app.services.cv_comparison import get_cv_summary
 import json
 
@@ -217,6 +217,8 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
         "audienceType": audience_type,
         "questions": results,
     }
+
+
 async def get_questions_excluding_parameters(
     db, current_user, attribute_type: str, exclude_params: list, model, get_database
 ):
@@ -321,5 +323,150 @@ async def get_questions_excluding_parameters(
         "success": True,
         "audienceType": audience_type,
         "cv_id": cv_id,
+        "questions": merged_questions
+    }
+
+#----------Second Flow------------------
+async def get_questions_by_parameters(
+    db,
+    current_user,
+    attribute_type: str,
+    parameters: list,
+    audience_type: str = None  # optionally pass audienceType directly
+):
+    """
+    Fetch specific questions from anchor attributes based on parameters & audience type.
+    If audience_type is not provided, fetch it from the latest proceed_without_cv document.
+    Also returns the latest document _id as doc_id.
+    """
+    questions_collection = db["questions"]
+    proceed_collection = db["proceed_without_cv"]
+
+    # Fetch latest proceed_without_cv record if audience_type not passed
+    if not audience_type:
+        latest_record = await proceed_collection.find_one(
+            {"user_id": str(current_user["_id"])},
+            sort=[("_id", -1)]
+        )
+        if not latest_record or "audienceType" not in latest_record:
+            raise HTTPException(status_code=404, detail="Audience type not found for user")
+        audience_type = latest_record["audienceType"]
+        doc_id = str(latest_record["_id"])
+    else:
+        # If audience_type is provided, fetch the latest doc_id for reference
+        latest_record = await proceed_collection.find_one(
+            {"user_id": str(current_user["_id"])},
+            sort=[("_id", -1)]
+        )
+        doc_id = str(latest_record["_id"]) if latest_record else None
+
+    # Fetch questions collection
+    questions_doc = await questions_collection.find_one({})
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail="No questions collection found")
+
+    attributes = questions_doc.get(attribute_type, [])
+    matching_entry = next(
+        (item for item in attributes if item.get("audienceType") == audience_type),
+        None
+    )
+    if not matching_entry:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
+        )
+
+    # Filter questions by parameters
+    results = []
+    for cq in matching_entry.get("questions", []):
+        param = normalize_parameter(cq.get("parameter"))
+        if param in parameters:
+            results.append({
+                "parameter": param,
+                "question": cq.get("question"),
+                "type": cq.get("type"),
+                "options": cq.get("options", []),
+                "iconfilename": cq.get("iconfilename"),
+                "source": "questions_collection"
+            })
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "doc_id": doc_id,
+        "questions": results,
+    }
+
+
+#----------Second Flow------------------
+async def get_remaining_anchor_questions_without_cv(
+    db, current_user, model, exclude_params=None, attribute_type=None
+):
+    """
+    Fetch remaining anchor questions for user using latest proceed_without_cv,
+    merged with system questions, excluding duplicates.
+    """
+    user_id = str(current_user["_id"])
+
+    # 1. Defaults
+    if exclude_params is None:
+        exclude_params = [
+            "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+            "Achievements"
+        ]
+    if attribute_type is None:
+        attribute_type = "Anchor attributes"
+
+    # 2. Fetch latest proceed_without_cv document
+    latest_proceed = await db["proceed_without_cv"].find(
+        {"user_id": user_id}
+    ).sort("created_at", -1).to_list(length=1)
+
+    if not latest_proceed or "anchor_questions_with_options" not in latest_proceed[0]:
+        # If no record exists, generate it first
+        await generate_anchor_options_from_answers_without_cv(
+            user_id=user_id,
+            model=model,
+            get_database=lambda: db
+        )
+        latest_proceed = await db["proceed_without_cv"].find(
+            {"user_id": user_id}
+        ).sort("created_at", -1).to_list(length=1)
+
+    proceed_doc = latest_proceed[0]
+
+    # 3. Collect user-specific questions (excluding params)
+    user_questions = []
+    for aq in proceed_doc.get("anchor_questions_with_options", []):
+        param = aq.get("parameter")
+        if param and param not in exclude_params:
+            user_questions.append({
+                "parameter": param,
+                "question": aq.get("question"),
+                "options": aq.get("options", [])
+            })
+
+    # Keep track of parameters already added
+    existing_params = {q["parameter"] for q in user_questions}
+
+    # 4. Fetch system questions and merge without duplicates
+    questions_doc = await db["questions"].find_one({}) or {}
+    merged_questions = user_questions.copy()
+
+    for item in questions_doc.get(attribute_type, []):
+        for q in item.get("questions", []):
+            param = q.get("parameter")
+            if not param or param in exclude_params or param in existing_params:
+                continue
+            merged_questions.append({
+                "parameter": param,
+                "question": q.get("question"),
+                "options": q.get("options", [])
+            })
+            existing_params.add(param)
+
+    # 5. Return response
+    return {
+        "success": True,
         "questions": merged_questions
     }

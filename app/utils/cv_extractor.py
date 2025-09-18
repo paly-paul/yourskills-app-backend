@@ -415,22 +415,30 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
     If the parameter string has multiple joined with '+', 
     total options = 5 * number_of_parameters.
     NOTE: limit is ignored for generation, but preserved in output.
+    Audience type is taken from cv_context (uploads collection).
     """
     results = []
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
+
+    # 🔹 Extract audience type from uploads collection (cv_context)
+    audience_type = cv_context.get("audience_type") or cv_context.get("audience")
+
+    # 🔹 Filter questions based on audience type
+    if audience_type:
+        questions_from_db = [
+            q for q in questions_from_db
+            if not q.get("audience") or q.get("audience") == audience_type
+        ]
 
     for q in questions_from_db:
         parameter = q.get("parameter", "")
         question_text = q.get("question")
         qtype = q.get("type")
         iconfilename = q.get("iconfilename")
-
         limit = q.get("limit") or q.get("Limit")
 
         parameter_list = [p.strip() for p in parameter.split("+")]
-
         option_count = 5 * len(parameter_list)
-
         labels = [chr(65 + i) for i in range(option_count)]
 
         prompt = (
@@ -456,7 +464,6 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             parsed = json.loads(cleaned)
 
             options = parsed.get("options", [])
-
             formatted_options = []
             for i in range(option_count):
                 if i < len(options):
@@ -498,7 +505,6 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         "success": True,
         "suggestions": results
     }
-
 
 
 async def get_latest_user_cv(db, user_id: str):
@@ -658,5 +664,125 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     )
 
     return {"success": True, "suggestions": suggestions}
+
+
+#--------------Second Flow--------------
+async def generate_anchor_options_from_answers_without_cv(
+    user_id: str, model, get_database
+):
+    """
+    Generate options for target anchor parameters based on answers_without_cv (latest doc),
+    and save them in proceed_without_cv collection.
+    """
+    target_parameters = {
+        "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+        "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+    }
+
+    db = get_database()
+
+    # Fetch latest answers_without_cv for this user
+    latest_answers = await db["answers_without_cv"].find(
+        {"user_id": user_id}
+    ).sort("created_at", -1).to_list(length=1)
+
+    if not latest_answers:
+        raise HTTPException(status_code=404, detail="No answers found in answers_without_cv")
+
+    answers = latest_answers[0].get("answers", [])
+
+    base_free_text_map = {}
+    for ans in answers:
+        param = ans["parameter"]
+        val = ans["value"]
+        if isinstance(val, str):
+            base_free_text_map[param] = val
+        elif isinstance(val, dict) and "text" in val:
+            base_free_text_map[param] = val["text"]
+
+    non_empty_texts = [t for t in base_free_text_map.values() if t]
+    context_sample = "\n".join(non_empty_texts)
+    variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
+
+    style_noise_pool = [
+        "use uncommon synonyms", "reorder ideas differently", "make phrasing more concise",
+        "add creative wording twists", "slightly formal tone", "slightly casual tone",
+        "shuffle activity order", "split compound ideas differently"
+    ]
+    random.shuffle(style_noise_pool)
+    style_noise = ", ".join(style_noise_pool[:3])
+
+    suggestions = []
+
+    for attr in target_parameters:
+        question_text = f"Select options related to: {attr}"
+        parameter_list = [p.strip() for p in attr.split("+")]
+        option_count = 5 * len(parameter_list)
+        labels = [chr(65 + i) for i in range(option_count)]
+
+        variation_instructions = (
+            "- Each execution produces DIFFERENT wording.\n"
+            "- Randomly split, merge, or rephrase phrases.\n"
+            "- Introduce synonyms, shuffle word order, or shorten.\n"
+            f"- Apply these variation rules: {style_noise}\n"
+        )
+
+        prompt = (
+            "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
+            f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
+            f"Target sub-parameters: {', '.join(parameter_list)}\n"
+            f"Question: {question_text}\n\n"
+            "Instructions:\n"
+            f"- Generate EXACTLY {option_count} options.\n"
+            f"- Each option must begin with {', '.join(labels)}.\n"
+            "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers.\n"
+            "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
+            "- Keep each option SHORT (2–5 words).\n"
+            f"{variation_instructions}"
+            f"- Variation key: {variation_key}\n\n"
+            "Respond ONLY in JSON format:\n"
+            "{ \"options\": [\n" +
+            ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
+            "\n  ]\n}"
+        )
+
+        try:
+            response = await model.generate_content_async(prompt)
+            cleaned = clean_llm_json_response(response.text)
+            parsed = json.loads(cleaned)
+            options = parsed.get("options", [])
+            formatted = [
+                opt if opt.startswith(f"{labels[i]}.") else f"{labels[i]}. {opt}"
+                for i, opt in enumerate(options[:option_count])
+            ]
+        except Exception as e:
+            formatted = [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
+
+        suggestions.append({
+            "parameter": attr,
+            "question": question_text,
+            "options": formatted,
+            "created_at": datetime.utcnow()
+        })
+
+    # Save in proceed_without_cv under latest user doc
+    latest_proceed = await db["proceed_without_cv"].find(
+        {"user_id": user_id}
+    ).sort("created_at", -1).to_list(length=1)
+
+    if latest_proceed:
+        await db["proceed_without_cv"].update_one(
+            {"_id": latest_proceed[0]["_id"]},
+            {"$set": {"anchor_questions_with_options": suggestions}}
+        )
+    else:
+        await db["proceed_without_cv"].insert_one({
+            "user_id": user_id,
+            "anchor_questions_with_options": suggestions,
+            "created_at": datetime.utcnow()
+        })
+
+    return {"success": True, "suggestions": suggestions}
+
 
 

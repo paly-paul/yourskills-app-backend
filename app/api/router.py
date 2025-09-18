@@ -19,7 +19,8 @@ from app.services.skill_suggestions import save_skill_suggestions
 from app.services.profile import (
     get_missing_field_questions_service,
     get_audience_questions_service,
-    get_questions_excluding_parameters, get_questions_by_parameters
+    get_questions_excluding_parameters, get_questions_by_parameters,
+    get_remaining_anchor_questions_without_cv
 )
 from app.utils.cv_extractor import generate_job_attribute_options
 import re
@@ -548,6 +549,130 @@ async def submit_answers_without_cv(
 ):
     answers = payload.get("answers", [])
     return await save_answers_without_cv(db, current_user, "Cv Missing", answers)
+
+@router.get("/anchor-questions/without-cv")
+async def get_anchor_questions_by_user_parameters(
+    db=Depends(get_database),
+    current_user=Depends(get_current_user)
+):
+    """
+    Fetch specific Anchor Attribute questions for the current user based on their audienceType
+    stored in the `proceed_without_cv` collection, specifically for:
+      - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
+      - Achievements
+    """
+    # Find the user's latest audienceType from proceed_without_cv by sorting
+    # by the creation date embedded in the ObjectId and getting the top one.
+    record = await db["proceed_without_cv"].find_one(
+        {"user_id": str(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+
+    if not record or "audienceType" not in record:
+        raise HTTPException(status_code=404, detail="Audience type not found for user")
+
+    audience_type = record["audienceType"]
+
+    # Fetch anchor questions for the given parameters & audience type
+    return await get_questions_by_parameters(
+        db,
+        current_user,
+        "Anchor attributes",
+        [
+            "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+            "Achievements"
+        ],
+        audience_type=audience_type  # pass audienceType to the function
+    )
+
+@router.get("/anchor-questions/remaining-without-cv")
+async def get_remaining_anchor_questions(
+    db=Depends(get_database),
+    current_user=Depends(get_current_user),
+    model=Depends(get_llm_model)
+):
+    """
+    Fetch remaining anchor attribute questions for the current user.
+    - Exclude base parameters.
+    - If user has no CV, fallback to latest proceed_without_cv and generate options if needed.
+    - Merge with system questions, avoiding duplicates.
+    """
+    exclude_params = [
+        "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+        "Achievements"
+    ]
+    attribute_type = "Anchor attributes"
+
+    # Use the new internal function, passing the parameters for clarity
+    return await get_remaining_anchor_questions_without_cv(
+        db=db,
+        current_user=current_user,
+        model=model,
+        exclude_params=exclude_params,
+        attribute_type=attribute_type
+    )
+
+
+@router.post("/anchor-questions/answers-without-cv")
+async def submit_anchor_attr_answers(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Save Anchor Attribute answers for the current user in a new collection
+    based on their audienceType from proceed_without_cv.
+    """
+
+    # Step 1: Get the latest audienceType for the user
+    record = await db["proceed_without_cv"].find_one(
+        {"user_id": str(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+
+    if not record or "audienceType" not in record:
+        raise HTTPException(status_code=404, detail="Audience type not found for user")
+
+    audience_type = record["audienceType"]
+
+    # Step 2: Extract answers from payload
+    answers = payload.get("answers", [])
+
+    # Step 3: Validate specific parameters
+    for ans in answers:
+        parameter = ans.get("parameter")
+        selected_values = ans.get("value", [])
+
+        if parameter == "Interests - RIASEC" and len(selected_values) > 3:
+            raise HTTPException(
+                status_code=400,
+                detail="You can select a maximum of 3 options for 'Interests - RIASEC'."
+            )
+
+    # Step 4: Prepare document to insert into new collection
+    user_id = current_user.get("id") or current_user.get("_id")
+
+    try:
+        user_id = str(ObjectId(user_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    document = {
+        "user_id": user_id,
+        "audienceType": audience_type,
+        "section": "Anchor Attributes",
+        "answers": answers,
+        "created_at": datetime.utcnow()
+    }
+
+    # Step 5: Save to answers_without_cv collection
+    result = await db["answers_without_cv"].insert_one(document)
+
+    return {
+        "message": "Anchor Attribute answers saved successfully",
+        "id": str(result.inserted_id),
+        "audienceType": audience_type
+    }
 
 
 
