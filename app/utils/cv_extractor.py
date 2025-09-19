@@ -667,12 +667,14 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
 
 
 #--------------Second Flow--------------
+
+
 async def generate_anchor_options_from_answers_without_cv(
     user_id: str, model, get_database
 ):
     """
-    Generate options for target anchor parameters based on answers_without_cv (latest doc),
-    and save them in proceed_without_cv collection.
+    Generate options for target anchor parameters based on answers_without_cv
+    (linked via latest proceed_without_cv.document_id), and save them in proceed_without_cv.
     """
     target_parameters = {
         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
@@ -681,16 +683,26 @@ async def generate_anchor_options_from_answers_without_cv(
 
     db = get_database()
 
-    # Fetch latest answers_without_cv for this user
-    latest_answers = await db["answers_without_cv"].find(
+    # Step 1: Fetch latest proceed_without_cv for this user
+    latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
 
-    if not latest_answers:
-        raise HTTPException(status_code=404, detail="No answers found in answers_without_cv")
+    if not latest_proceed:
+        raise HTTPException(status_code=404, detail="No proceed_without_cv found for user")
 
-    answers = latest_answers[0].get("answers", [])
+    document_id = latest_proceed[0]["_id"]
 
+    # Step 2: Fetch answers from answers_without_cv linked to this document_id
+    answers_cursor = db["answers_without_cv"].find(
+        {"user_id": user_id, "document_id": str(document_id)}
+    )
+    answers = await answers_cursor.to_list(length=None)
+
+    if not answers:
+        raise HTTPException(status_code=404, detail="No answers found for latest proceed_without_cv document")
+
+    # Step 3: Extract free-text answers for context
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -714,6 +726,7 @@ async def generate_anchor_options_from_answers_without_cv(
 
     suggestions = []
 
+    # Step 4: Generate rephrased options
     for attr in target_parameters:
         question_text = f"Select options related to: {attr}"
         parameter_list = [p.strip() for p in attr.split("+")]
@@ -755,34 +768,28 @@ async def generate_anchor_options_from_answers_without_cv(
                 opt if opt.startswith(f"{labels[i]}.") else f"{labels[i]}. {opt}"
                 for i, opt in enumerate(options[:option_count])
             ]
-        except Exception as e:
+        except Exception:
             formatted = [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
 
         suggestions.append({
             "parameter": attr,
             "question": question_text,
             "options": formatted,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.utcnow(),
+            "document_id": str(document_id)   # ✅ store inside each suggestion
         })
 
-    # Save in proceed_without_cv under latest user doc
-    latest_proceed = await db["proceed_without_cv"].find(
-        {"user_id": user_id}
-    ).sort("created_at", -1).to_list(length=1)
+    # Step 5: Save generated suggestions back into the same proceed_without_cv doc
+    await db["proceed_without_cv"].update_one(
+        {"_id": document_id},
+        {
+            "$set": {
+                "anchor_questions_with_options": suggestions,
+                "document_id": str(document_id)  # ✅ also store at root level
+            }
+        }
+    )
 
-    if latest_proceed:
-        await db["proceed_without_cv"].update_one(
-            {"_id": latest_proceed[0]["_id"]},
-            {"$set": {"anchor_questions_with_options": suggestions}}
-        )
-    else:
-        await db["proceed_without_cv"].insert_one({
-            "user_id": user_id,
-            "anchor_questions_with_options": suggestions,
-            "created_at": datetime.utcnow()
-        })
-
-    return {"success": True, "suggestions": suggestions}
-
+    return {"success": True, "document_id": str(document_id), "suggestions": suggestions}
 
 

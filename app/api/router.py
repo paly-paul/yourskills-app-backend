@@ -620,11 +620,11 @@ async def submit_anchor_attr_answers(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Save Anchor Attribute answers for the current user in a new collection
-    based on their audienceType from proceed_without_cv.
+    Save Anchor Attribute answers for the current user in 'answers_without_cv'
+    using the common save_answers_without_cv function.
     """
 
-    # Step 1: Get the latest audienceType for the user
+    # Step 1: Get the latest audienceType record for the user
     record = await db["proceed_without_cv"].find_one(
         {"user_id": str(current_user["_id"])},
         sort=[("_id", -1)]
@@ -634,46 +634,39 @@ async def submit_anchor_attr_answers(
         raise HTTPException(status_code=404, detail="Audience type not found for user")
 
     audience_type = record["audienceType"]
+    document_id = record["_id"]  # use _id from proceed_without_cv
 
     # Step 2: Extract answers from payload
     answers = payload.get("answers", [])
 
-    # Step 3: Validate specific parameters
+    # Step 3: Validate specific parameters (RIASEC rule)
     for ans in answers:
         parameter = ans.get("parameter")
         selected_values = ans.get("value", [])
 
-        if parameter == "Interests - RIASEC" and len(selected_values) > 3:
+        if parameter == "Interests - RIASEC" and isinstance(selected_values, list) and len(selected_values) > 3:
             raise HTTPException(
                 status_code=400,
                 detail="You can select a maximum of 3 options for 'Interests - RIASEC'."
             )
 
-    # Step 4: Prepare document to insert into new collection
-    user_id = current_user.get("id") or current_user.get("_id")
+    # Step 4: Save answers using the common function
+    result = await save_answers_without_cv(
+        db=db,
+        current_user=current_user,
+        section="Anchor Attributes",
+        answers=answers,
+        document_id=document_id
+    )
 
-    try:
-        user_id = str(ObjectId(user_id))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid user_id")
-
-    document = {
-        "user_id": user_id,
-        "audienceType": audience_type,
-        "section": "Anchor Attributes",
-        "answers": answers,
-        "created_at": datetime.utcnow()
-    }
-
-    # Step 5: Save to answers_without_cv collection
-    result = await db["answers_without_cv"].insert_one(document)
-
+    # Step 5: Return success response
     return {
-        "message": "Anchor Attribute answers saved successfully",
-        "id": str(result.inserted_id),
-        "audienceType": audience_type
+        "success": True,
+        "message": "Anchor Attribute answers saved successfully (without CV)",
+        "audienceType": audience_type,
+        "doc_id": str(document_id),
+        "details": result
     }
-
 
 
 @router.get("/cv/profile-data")

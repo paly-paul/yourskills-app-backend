@@ -155,11 +155,11 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
 
 
 async def save_answers_without_cv(
-    db, current_user: dict, section: str, answers: list
+    db, current_user: dict, section: str, answers: list, document_id: ObjectId
 ):
     """
     Save answers that are not linked to any CV.
-    Stored in 'answers_without_cv' collection.
+    Stored in 'answers_without_cv' collection with document_id reference.
     """
     user_id = current_user.get("id") or current_user.get("_id")
 
@@ -188,19 +188,21 @@ async def save_answers_without_cv(
                 )
 
         answer_docs.append(
-            AnswerWithoutCvModel(
-                user_id=str(user_id),
-                tenant_id=str(current_user.get("tenant_id")),
-                section=section,
-                parameter=ans["parameter"],
-                answer_type=answer_type,
-                value=value,
-                limit=limit,
-                created_at=datetime.utcnow()
-            ).dict(by_alias=True)
-        )
+    AnswerWithoutCvModel(
+        user_id=str(user_id),
+        tenant_id=str(current_user.get("tenant_id")),
+        section=section,
+        parameter=ans["parameter"],
+        answer_type=answer_type,
+        value=value,
+        limit=limit,
+        created_at=datetime.utcnow(),
+        document_id=str(document_id) 
+    ).dict(by_alias=True)
+)
+
 
     if answer_docs:
-        await db["answers_without_cv"].insert_many(answer_docs)  # ✅ separate collection
+        await db["answers_without_cv"].insert_many(answer_docs)
 
-    return {"message": "Answers saved successfully (without CV)"}
+    return {"message": "Answers saved successfully (without CV)", "document_id": str(document_id)}
