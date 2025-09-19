@@ -669,6 +669,135 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
 #--------------Second Flow--------------
 
 
+
+async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
+    """
+    Generates multiple-choice options for missing CV attributes
+    and saves them to the proceed_without_cv collection.
+    """
+
+    proceed_collection = db["proceed_without_cv"]
+    answers_collection = db["answers_without_cv"]
+    questions_collection = db["questions"]
+
+    latest_doc = await proceed_collection.find_one(
+        {"user_id": user_id},
+        sort=[("created_at", -1)]
+    )
+    if not latest_doc:
+        raise HTTPException(status_code=404, detail="No proceed_without_cv doc found")
+
+    latest_document_id = str(latest_doc["_id"])
+    audience_type = latest_doc.get("audienceType")
+
+    missing_answers_cursor = answers_collection.find(
+        {"user_id": user_id, "document_id": latest_document_id, "section": "Cv Missing"}
+    )
+    missing_answers = await missing_answers_cursor.to_list(length=None)
+
+    if not missing_answers:
+        raise HTTPException(status_code=404, detail="No missing answers found")
+
+    context_str = "\n".join(
+        f"{a['parameter']}: {a.get('value')}" for a in missing_answers if a.get("value")
+    )
+
+    questions_doc = await questions_collection.find_one({})
+    if not questions_doc:
+        raise HTTPException(status_code=404, detail="No questions document found")
+
+    job_attributes = questions_doc.get("Job attributes", [])
+
+    questions_for_user = []
+    for qa in job_attributes:
+        if qa.get("audienceType") == audience_type:
+            questions_for_user = qa.get("questions", [])
+            break
+
+    if not questions_for_user:
+        raise HTTPException(status_code=404, detail=f"No questions found for audienceType {audience_type}")
+
+    results = []
+
+    for q in questions_for_user:
+        parameter = q.get("parameter", "")
+        question_text = q.get("question")
+        qtype = q.get("type")
+        iconfilename = q.get("iconfilename")
+        limit = q.get("limit") or q.get("Limit")
+
+        parameter_list = [p.strip() for p in parameter.split("+")]
+        option_count = 5 * len(parameter_list)
+        labels = [chr(65 + i) for i in range(option_count)]
+
+        prompt = (
+            "You are an AI assistant generating career-related multiple-choice options.\n\n"
+            f"Audience Type: {audience_type}\n\n"
+            f"Missing CV Context:\n{context_str}\n\n"
+            f"Question: {question_text}\n\n"
+            "Respond ONLY in JSON format:\n"
+            "{\n"
+            "  \"options\": [\n"
+            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
+            "\n  ]\n"
+            "}\n\n"
+            "RULES:\n"
+            f"- Always provide EXACTLY {option_count} options.\n"
+            f"- Each option must begin with {', '.join(labels)}.\n"
+            "- Keep options SHORT (2–5 words).\n"
+            "- Options must be distinct and meaningful."
+        )
+
+        try:
+            response = await model.generate_content_async(prompt)
+            cleaned = clean_llm_json_response(response.text)
+            parsed = json.loads(cleaned)
+
+            options = parsed.get("options", [])
+            formatted_options = []
+            for i in range(option_count):
+                opt_text = options[i].strip() if i < len(options) else f"Option {i+1}"
+                if not opt_text.startswith(f"{labels[i]}."):
+                    opt_text = f"{labels[i]}. {opt_text}"
+                formatted_options.append(opt_text)
+
+            result_item = {
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": qtype,
+                "iconfilename": iconfilename,
+                "options": formatted_options,
+            }
+            if limit is not None:
+                result_item["limit"] = limit
+
+            results.append(result_item)
+
+        except Exception:
+            result_item = {
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": qtype,
+                "iconfilename": iconfilename,
+                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
+            }
+            if limit is not None:
+                result_item["limit"] = limit
+
+            results.append(result_item)
+
+    await proceed_collection.update_one(
+        {"_id": latest_doc["_id"]},
+        {"$set": {"job_questions_with_options": results, "updated_at": datetime.utcnow()}}
+    )
+
+    return {
+        "success": True,
+        "latest_document_id": latest_document_id,
+        "audience_type": audience_type,
+        "suggestions": results
+    }
+
 async def generate_anchor_options_from_answers_without_cv(
     user_id: str, model, get_database
 ):
@@ -683,7 +812,6 @@ async def generate_anchor_options_from_answers_without_cv(
 
     db = get_database()
 
-    # Step 1: Fetch latest proceed_without_cv for this user
     latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
@@ -692,8 +820,6 @@ async def generate_anchor_options_from_answers_without_cv(
         raise HTTPException(status_code=404, detail="No proceed_without_cv found for user")
 
     document_id = latest_proceed[0]["_id"]
-
-    # Step 2: Fetch answers from answers_without_cv linked to this document_id
     answers_cursor = db["answers_without_cv"].find(
         {"user_id": user_id, "document_id": str(document_id)}
     )
@@ -702,7 +828,6 @@ async def generate_anchor_options_from_answers_without_cv(
     if not answers:
         raise HTTPException(status_code=404, detail="No answers found for latest proceed_without_cv document")
 
-    # Step 3: Extract free-text answers for context
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -725,8 +850,6 @@ async def generate_anchor_options_from_answers_without_cv(
     style_noise = ", ".join(style_noise_pool[:3])
 
     suggestions = []
-
-    # Step 4: Generate rephrased options
     for attr in target_parameters:
         question_text = f"Select options related to: {attr}"
         parameter_list = [p.strip() for p in attr.split("+")]
@@ -776,16 +899,14 @@ async def generate_anchor_options_from_answers_without_cv(
             "question": question_text,
             "options": formatted,
             "created_at": datetime.utcnow(),
-            "document_id": str(document_id)   # ✅ store inside each suggestion
+            "document_id": str(document_id)   
         })
-
-    # Step 5: Save generated suggestions back into the same proceed_without_cv doc
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
         {
             "$set": {
                 "anchor_questions_with_options": suggestions,
-                "document_id": str(document_id)  # ✅ also store at root level
+                "document_id": str(document_id)  
             }
         }
     )

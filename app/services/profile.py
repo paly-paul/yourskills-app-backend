@@ -3,7 +3,7 @@ from bson import ObjectId
 from pymongo import DESCENDING
 from datetime import datetime
 from app.utils.cv_extractor import predict_audience_type
-from app.utils.cv_extractor import generate_missing_field_suggestions, generate_anchor_attribute_options, generate_anchor_options_from_answers_without_cv
+from app.utils.cv_extractor import generate_missing_field_suggestions, generate_anchor_attribute_options, generate_anchor_options_from_answers_without_cv, generate_job_attribute_options_without_cv
 from app.services.cv_comparison import get_cv_summary
 import json
 
@@ -325,14 +325,45 @@ async def get_questions_excluding_parameters(
         "cv_id": cv_id,
         "questions": merged_questions
     }
+#___________________________________________________________________________________________________________________________________________________
+#____________________________________________________________________________________________________________________________________________________
+#----------------------------------------------------------Second Flow-----------------------------------------------------------------------------
 
-#----------Second Flow------------------
+async def get_audience_questions_service_without_cv(db, current_user):
+    """
+    Fetch audience-specific job questions with options 
+    for a user who proceeded without CV upload.
+    Auto-generates if not already saved.
+    """
+    proceed_collection = db["proceed_without_cv"]
+
+    latest_doc = await proceed_collection.find_one(
+        {"user_id": str(current_user["_id"])}, 
+        sort=[("created_at", -1)]
+    )
+    if not latest_doc:
+        raise HTTPException(status_code=404, detail="No proceed_without_cv doc found for this user")
+
+    audience_type = latest_doc.get("audienceType")
+    job_questions_with_options = latest_doc.get("job_questions_with_options", [])
+
+    if not job_questions_with_options:
+        
+        generated = await generate_job_attribute_options_without_cv(str(current_user["_id"]), db)
+        job_questions_with_options = generated["suggestions"]
+
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": job_questions_with_options
+    }
+
 async def get_questions_by_parameters(
     db,
     current_user,
     attribute_type: str,
     parameters: list,
-    audience_type: str = None  # optionally pass audienceType directly
+    audience_type: str = None  
 ):
     """
     Fetch specific questions from anchor attributes based on parameters & audience type.
@@ -341,8 +372,6 @@ async def get_questions_by_parameters(
     """
     questions_collection = db["questions"]
     proceed_collection = db["proceed_without_cv"]
-
-    # Fetch latest proceed_without_cv record if audience_type not passed
     if not audience_type:
         latest_record = await proceed_collection.find_one(
             {"user_id": str(current_user["_id"])},
@@ -353,14 +382,12 @@ async def get_questions_by_parameters(
         audience_type = latest_record["audienceType"]
         doc_id = str(latest_record["_id"])
     else:
-        # If audience_type is provided, fetch the latest doc_id for reference
         latest_record = await proceed_collection.find_one(
             {"user_id": str(current_user["_id"])},
             sort=[("_id", -1)]
         )
         doc_id = str(latest_record["_id"]) if latest_record else None
 
-    # Fetch questions collection
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -375,8 +402,6 @@ async def get_questions_by_parameters(
             status_code=404,
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
-
-    # Filter questions by parameters
     results = []
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
@@ -397,8 +422,6 @@ async def get_questions_by_parameters(
         "questions": results,
     }
 
-
-#----------Second Flow------------------
 async def get_remaining_anchor_questions_without_cv(
     db, current_user, model, exclude_params=None, attribute_type=None
 ):
@@ -408,7 +431,6 @@ async def get_remaining_anchor_questions_without_cv(
     """
     user_id = str(current_user["_id"])
 
-    # 1. Defaults
     if exclude_params is None:
         exclude_params = [
             "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
@@ -417,13 +439,11 @@ async def get_remaining_anchor_questions_without_cv(
     if attribute_type is None:
         attribute_type = "Anchor attributes"
 
-    # 2. Fetch latest proceed_without_cv document
     latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
 
     if not latest_proceed or "anchor_questions_with_options" not in latest_proceed[0]:
-        # If no record exists, generate it first
         await generate_anchor_options_from_answers_without_cv(
             user_id=user_id,
             model=model,
@@ -435,7 +455,6 @@ async def get_remaining_anchor_questions_without_cv(
 
     proceed_doc = latest_proceed[0]
 
-    # 3. Collect user-specific questions (excluding params)
     user_questions = []
     for aq in proceed_doc.get("anchor_questions_with_options", []):
         param = aq.get("parameter")
@@ -445,11 +464,8 @@ async def get_remaining_anchor_questions_without_cv(
                 "question": aq.get("question"),
                 "options": aq.get("options", [])
             })
-
-    # Keep track of parameters already added
     existing_params = {q["parameter"] for q in user_questions}
 
-    # 4. Fetch system questions and merge without duplicates
     questions_doc = await db["questions"].find_one({}) or {}
     merged_questions = user_questions.copy()
 
@@ -465,7 +481,7 @@ async def get_remaining_anchor_questions_without_cv(
             })
             existing_params.add(param)
 
-    # 5. Return response
+
     return {
         "success": True,
         "questions": merged_questions

@@ -19,6 +19,7 @@ from app.services.skill_suggestions import save_skill_suggestions
 from app.services.profile import (
     get_missing_field_questions_service,
     get_audience_questions_service,
+    get_audience_questions_service_without_cv,
     get_questions_excluding_parameters, get_questions_by_parameters,
     get_remaining_anchor_questions_without_cv
 )
@@ -41,6 +42,9 @@ def get_llm_model():
 router = APIRouter()
 
 
+# ------------------------------------Routers for With cv ----------------------------------------------------------------
+
+
 @router.post("/register")
 async def register(user: UserCreate, db=Depends(get_database)):
    
@@ -57,7 +61,6 @@ async def register(user: UserCreate, db=Depends(get_database)):
         "token": access_token,
         "tenant_id": created_user["tenant_id"]
     }
-
 
 
 @router.post("/login")
@@ -111,16 +114,7 @@ async def extract_cv(
     db=Depends(get_database),
     current_user=Depends(get_current_user)
 ):
-    import tempfile
-    import re
-    from datetime import datetime
-    from app.utils.cv_extractor import (
-        extract_cv_data_from_file,
-        generate_missing_field_suggestions,
-        predict_audience_type,
-        generate_job_attribute_options
-    )
-
+    
     with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
@@ -374,7 +368,6 @@ async def submit_anchor_attr_answers(
     )
 
 
-
 @router.get("/cv/latest/details")
 async def get_latest_cv_details(
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -483,9 +476,11 @@ async def get_latest_cv_details(
 
 
 
-# ------- Second Flow Endpints( Without cv/) -------
+#_______________________________________________________________________________________________________________________________________________________
+#____________________________________________________________________________________________________________________________________________________________________________
+# ------------------------------------------ Second Flow Endpints( Without cv/) -----------------------------------------------------------
 
-# ---------- NEW API TO PROCEED WITHOUT CV ----------
+
 @router.post("/proceed-without-cv")
 async def proceed_without_cv(
     payload: dict,
@@ -532,7 +527,6 @@ async def get_cv_missing_questions(
     """
     questions_collection = db["questions"]
 
-    # Fetch the first document (or you can filter by tenant_id if needed)
     questions_doc = await questions_collection.find_one({}, {"Cv Missing": 1, "_id": 0})
 
     if not questions_doc:
@@ -541,7 +535,7 @@ async def get_cv_missing_questions(
     return {"questions": questions_doc.get("Cv Missing", [])}
 
 
-@router.post("/answers/without-cv")
+@router.post("/missing-answers/without-cv")
 async def submit_answers_without_cv(
     payload: dict,
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -549,6 +543,26 @@ async def submit_answers_without_cv(
 ):
     answers = payload.get("answers", [])
     return await save_answers_without_cv(db, current_user, "Cv Missing", answers)
+
+
+@router.get("/job-questions-without-cv")
+async def get_audience_questions_without_cv(
+    db=Depends(get_database),
+    current_user=Depends(get_current_user)
+):
+    """
+    API endpoint to fetch audience-specific job questions with options
+    for users who proceed without uploading a CV.
+    """
+    response = await get_audience_questions_service_without_cv(db, current_user)
+
+    if "questions" in response and isinstance(response["questions"], list):
+        for q in response["questions"]:
+            if "parameter" in q and isinstance(q["parameter"], list):
+                q["parameter"] = "+".join(str(p) for p in q["parameter"])
+
+    return response
+
 
 @router.get("/anchor-questions/without-cv")
 async def get_anchor_questions_by_user_parameters(
@@ -561,8 +575,7 @@ async def get_anchor_questions_by_user_parameters(
       - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
       - Achievements
     """
-    # Find the user's latest audienceType from proceed_without_cv by sorting
-    # by the creation date embedded in the ObjectId and getting the top one.
+
     record = await db["proceed_without_cv"].find_one(
         {"user_id": str(current_user["_id"])},
         sort=[("_id", -1)]
@@ -573,7 +586,6 @@ async def get_anchor_questions_by_user_parameters(
 
     audience_type = record["audienceType"]
 
-    # Fetch anchor questions for the given parameters & audience type
     return await get_questions_by_parameters(
         db,
         current_user,
@@ -582,7 +594,7 @@ async def get_anchor_questions_by_user_parameters(
             "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
             "Achievements"
         ],
-        audience_type=audience_type  # pass audienceType to the function
+        audience_type=audience_type  
     )
 
 @router.get("/anchor-questions/remaining-without-cv")
@@ -603,7 +615,7 @@ async def get_remaining_anchor_questions(
     ]
     attribute_type = "Anchor attributes"
 
-    # Use the new internal function, passing the parameters for clarity
+    
     return await get_remaining_anchor_questions_without_cv(
         db=db,
         current_user=current_user,
@@ -623,8 +635,6 @@ async def submit_anchor_attr_answers(
     Save Anchor Attribute answers for the current user in 'answers_without_cv'
     using the common save_answers_without_cv function.
     """
-
-    # Step 1: Get the latest audienceType record for the user
     record = await db["proceed_without_cv"].find_one(
         {"user_id": str(current_user["_id"])},
         sort=[("_id", -1)]
@@ -634,12 +644,10 @@ async def submit_anchor_attr_answers(
         raise HTTPException(status_code=404, detail="Audience type not found for user")
 
     audience_type = record["audienceType"]
-    document_id = record["_id"]  # use _id from proceed_without_cv
+    document_id = record["_id"] 
 
-    # Step 2: Extract answers from payload
     answers = payload.get("answers", [])
 
-    # Step 3: Validate specific parameters (RIASEC rule)
     for ans in answers:
         parameter = ans.get("parameter")
         selected_values = ans.get("value", [])
@@ -649,8 +657,6 @@ async def submit_anchor_attr_answers(
                 status_code=400,
                 detail="You can select a maximum of 3 options for 'Interests - RIASEC'."
             )
-
-    # Step 4: Save answers using the common function
     result = await save_answers_without_cv(
         db=db,
         current_user=current_user,
@@ -659,7 +665,6 @@ async def submit_anchor_attr_answers(
         document_id=document_id
     )
 
-    # Step 5: Return success response
     return {
         "success": True,
         "message": "Anchor Attribute answers saved successfully (without CV)",
@@ -667,6 +672,13 @@ async def submit_anchor_attr_answers(
         "doc_id": str(document_id),
         "details": result
     }
+
+
+
+
+#____________________________________________________________________________________________________________________________________________________
+
+#-------------------------------------Api for Model prediction Data ------------------------------------------------------------------------------
 
 
 @router.get("/cv/profile-data")
@@ -770,6 +782,14 @@ async def get_cv_profile_data(
         "Talent Information": talent_info,
         "Anchor Attributes": anchor_attrs
     }
+
+
+
+# ---------------------------------------- Extraction without auth ---------------------------------------
+#-----------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------------------------
+
+
 def generate_dummy_user_id():
     return ObjectId()
 
