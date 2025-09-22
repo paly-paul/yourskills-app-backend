@@ -1,0 +1,36 @@
+{
+  "answers": [
+    {
+      "parameter": "Core Tasks+Supplementary Tasks",
+      "value": ["A. Software development", "B. Data analysis", "G. Process automation"]
+    },
+    {
+      "parameter": "Emerging Tasks",
+      "value": ["A. Led new projects", "C. Developed new skills", "F. Built AI prototypes (New)"]
+    },
+    {
+      "parameter": "Hot Technologies",
+      "value": ["A. Python & CRM", "B. Data tools & AWS", "E. Predictive analytics models"]
+    },
+    {
+      "parameter": "Knowledge+Skills",
+      "value": ["A. Data Analytics", "C. Software Engineering", "H. Agile Methodologies"]
+    },
+    {
+      "parameter": "Functional Skills",
+      "value": ["A. Tech problem-solving", "B. Data analysis skills", "E. Leadership & teamwork"]
+    },
+    {
+      "parameter": "Work Styles+Work Activities+Abilities",
+      "value": ["B. Collaborative, team-based", "C. Problem-solving focused", "D. Data-driven, analytical", "M. Agile, iterative", "N. Learning-focused, growth"]
+    },
+    {
+      "parameter": "Work Values",
+      "value": ["B. Challenging projects", "C. Leadership opportunities", "D. Tech stack growth"]
+    },
+    {
+      "parameter": "Career Interests",
+      "value": ["A. Data Scientist", "E. Cloud Architect", "F. AI/ML Researcher (New)"]
+    }
+  ]
+}
