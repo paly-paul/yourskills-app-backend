@@ -541,8 +541,29 @@ async def submit_answers_without_cv(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
+    """
+    Endpoint to save missing answers without CV.
+    Gets latest document_id from proceed_without_cv for this user.
+    """
     answers = payload.get("answers", [])
-    return await save_answers_without_cv(db, current_user, "Cv Missing", answers)
+
+    user_id = current_user.get("id") or current_user.get("_id")
+    try:
+        user_id = ObjectId(str(user_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    latest_doc = await db["proceed_without_cv"].find_one(
+        {"user_id": str(user_id)},
+        sort=[("_id", -1)]
+    )
+
+    if not latest_doc:
+        raise HTTPException(status_code=404, detail="No proceed_without_cv document found")
+
+    document_id = latest_doc["_id"]
+
+    return await save_answers_without_cv(db, current_user, "Cv Missing", answers, document_id)
 
 
 @router.get("/job-questions-without-cv")
@@ -562,6 +583,59 @@ async def get_audience_questions_without_cv(
                 q["parameter"] = "+".join(str(p) for p in q["parameter"])
 
     return response
+
+
+@router.post("/job-questions/answers/without-cv")
+async def submit_job_attr_answers_without_cv(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Endpoint to save Job Attributes answers without CV.
+    Validates answer limits and stores them under proceed_without_cv document.
+    """
+    answers = payload.get("answers", [])
+
+    for ans in answers:
+        parameter = ans.get("parameter")
+        selected_values = ans.get("value", [])
+
+        if parameter == "Work Styles + Work Activities + Abilities" and len(selected_values) > 5:
+            raise HTTPException(
+                status_code=400,
+                detail="You can select a maximum of 5 options for 'Work Styles + Work Activities + Abilities'."
+            )
+
+        if parameter == "Work Values" and len(selected_values) > 3:
+            raise HTTPException(
+                status_code=400,
+                detail="You can select a maximum of 3 options for 'Work Values'."
+            )
+
+    user_id = current_user.get("id") or current_user.get("_id")
+    try:
+        user_id = ObjectId(str(user_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    latest_doc = await db["proceed_without_cv"].find_one(
+        {"user_id": str(user_id)},
+        sort=[("_id", -1)]
+    )
+
+    if not latest_doc:
+        raise HTTPException(status_code=404, detail="No proceed_without_cv document found")
+
+    document_id = latest_doc["_id"]
+
+    return await save_answers_without_cv(
+        db=db,
+        current_user=current_user,
+        section="Job Attributes",
+        answers=answers,
+        document_id=document_id
+    )
 
 
 @router.get("/anchor-questions/without-cv")
