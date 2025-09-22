@@ -430,7 +430,6 @@ async def get_remaining_anchor_questions_without_cv(
     merged with system questions, excluding duplicates.
     """
     user_id = str(current_user["_id"])
-
     if exclude_params is None:
         exclude_params = [
             "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
@@ -439,50 +438,76 @@ async def get_remaining_anchor_questions_without_cv(
     if attribute_type is None:
         attribute_type = "Anchor attributes"
 
-    latest_proceed = await db["proceed_without_cv"].find(
+    # Fetch the latest proceed_without_cv document
+    latest_proceed_list = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
+    latest_proceed = latest_proceed_list[0] if latest_proceed_list else None
 
-    if not latest_proceed or "anchor_questions_with_options" not in latest_proceed[0]:
-        await generate_anchor_options_from_answers_without_cv(
-            user_id=user_id,
-            model=model,
-            get_database=lambda: db
-        )
-        latest_proceed = await db["proceed_without_cv"].find(
-            {"user_id": user_id}
-        ).sort("created_at", -1).to_list(length=1)
-
-    proceed_doc = latest_proceed[0]
-
-    user_questions = []
-    for aq in proceed_doc.get("anchor_questions_with_options", []):
-        param = aq.get("parameter")
-        if param and param not in exclude_params:
-            user_questions.append({
-                "parameter": param,
-                "question": aq.get("question"),
-                "options": aq.get("options", [])
-            })
-    existing_params = {q["parameter"] for q in user_questions}
-
+    # Fetch system questions
     questions_doc = await db["questions"].find_one({}) or {}
-    merged_questions = user_questions.copy()
-
+    system_questions = []
     for item in questions_doc.get(attribute_type, []):
         for q in item.get("questions", []):
             param = q.get("parameter")
-            if not param or param in exclude_params or param in existing_params:
-                continue
-            merged_questions.append({
-                "parameter": param,
-                "question": q.get("question"),
-                "options": q.get("options", [])
-            })
-            existing_params.add(param)
+            if param:
+                system_questions.append(q)
 
+    # Only generate options if they don’t exist yet
+    if latest_proceed and "anchor_questions_with_options" in latest_proceed:
+        suggestions = latest_proceed["anchor_questions_with_options"]
+    else:
+        # generate options once
+        await generate_anchor_options_from_answers_without_cv(
+            user_id=user_id,
+            questions=system_questions,
+            model=model,
+            get_database=lambda: db
+        )
+        latest_proceed_list = await db["proceed_without_cv"].find(
+            {"user_id": user_id}
+        ).sort("created_at", -1).to_list(length=1)
+        latest_proceed = latest_proceed_list[0]
+        suggestions = latest_proceed.get("anchor_questions_with_options", [])
+
+    # Collect user questions excluding the ones in exclude_params
+    user_questions = []
+    seen_parameters = set()
+    for aq in suggestions:
+        param = aq.get("parameter")
+        if param:
+            # Normalize to string
+            if isinstance(param, list):
+                param_str = " + ".join(param)
+            else:
+                param_str = param
+            if param_str not in exclude_params and param_str not in seen_parameters:
+                user_questions.append({
+                    "parameter": param_str,
+                    "question": aq.get("question"),
+                    "options": aq.get("options", [])
+                })
+                seen_parameters.add(param_str)
+
+    # Merge with system questions not in exclude_params or already seen
+    for item in system_questions:
+        param = item.get("parameter")
+        if not param:
+            continue
+        if isinstance(param, list):
+            param_str = " + ".join(param)
+        else:
+            param_str = param
+        if param_str in exclude_params or param_str in seen_parameters:
+            continue
+        user_questions.append({
+            "parameter": param_str,
+            "question": item.get("question"),
+            "options": item.get("options", [])
+        })
+        seen_parameters.add(param_str)
 
     return {
         "success": True,
-        "questions": merged_questions
+        "questions": user_questions
     }

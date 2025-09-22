@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from docx import Document
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple,Any
 from collections import defaultdict
 from app.db.database import get_database
 import random
@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime
 from fastapi import HTTPException
 from bson import ObjectId
+
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -799,11 +800,14 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
     }
 
 async def generate_anchor_options_from_answers_without_cv(
-    user_id: str, model, get_database
-):
+    user_id: str, questions, model, get_database
+) -> Dict[str, Any]:
     """
-    Generate options for target anchor parameters based on answers_without_cv
-    (linked via latest proceed_without_cv.document_id), and save them in proceed_without_cv.
+    Generate multiple-choice options for Anchor attributes based ONLY on:
+    - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
+    - Achievements (text field only)
+    Fetch answers from answers_without_cv based on the latest proceed_without_cv.document_id,
+    generate options using LLM, and save them back into proceed_without_cv.
     """
     target_parameters = {
         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
@@ -812,6 +816,7 @@ async def generate_anchor_options_from_answers_without_cv(
 
     db = get_database()
 
+    # Fetch the latest proceed_without_cv document for the user
     latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
@@ -820,14 +825,21 @@ async def generate_anchor_options_from_answers_without_cv(
         raise HTTPException(status_code=404, detail="No proceed_without_cv found for user")
 
     document_id = latest_proceed[0]["_id"]
+
+    # Fetch answers linked to this document_id
     answers_cursor = db["answers_without_cv"].find(
-        {"user_id": user_id, "document_id": str(document_id)}
+        {"user_id": user_id, "document_id": str(document_id),
+         "parameter": {"$in": [
+            "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+            "Achievements"
+         ]}}
     )
     answers = await answers_cursor.to_list(length=None)
 
     if not answers:
-        raise HTTPException(status_code=404, detail="No answers found for latest proceed_without_cv document")
+        raise HTTPException(status_code=404, detail="No required anchor answers found")
 
+    # Extract free-text values from answers
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -838,9 +850,11 @@ async def generate_anchor_options_from_answers_without_cv(
             base_free_text_map[param] = val["text"]
 
     non_empty_texts = [t for t in base_free_text_map.values() if t]
+    random.shuffle(non_empty_texts)
     context_sample = "\n".join(non_empty_texts)
-    variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
 
+    # Variation instructions
+    variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
     style_noise_pool = [
         "use uncommon synonyms", "reorder ideas differently", "make phrasing more concise",
         "add creative wording twists", "slightly formal tone", "slightly casual tone",
@@ -850,17 +864,26 @@ async def generate_anchor_options_from_answers_without_cv(
     style_noise = ", ".join(style_noise_pool[:3])
 
     suggestions = []
-    for attr in target_parameters:
-        question_text = f"Select options related to: {attr}"
-        parameter_list = [p.strip() for p in attr.split("+")]
+
+    for q in questions:
+        parameter = q.get("parameter")
+        if parameter not in target_parameters:
+            continue
+
+        question_text = q.get("question")
+        type_ = q.get("type")
+        iconfilename = q.get("iconfilename")
+
+        parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 5 * len(parameter_list)
         labels = [chr(65 + i) for i in range(option_count)]
 
         variation_instructions = (
-            "- Each execution produces DIFFERENT wording.\n"
-            "- Randomly split, merge, or rephrase phrases.\n"
-            "- Introduce synonyms, shuffle word order, or shorten.\n"
-            f"- Apply these variation rules: {style_noise}\n"
+            "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
+            "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
+            "- Introduce synonyms, shuffle word order, or shorten differently.\n"
+            "- Do NOT invent anything that is not explicitly present in the free-text answers.\n"
+            f"- Apply these random variation rules: {style_noise}\n"
         )
 
         prompt = (
@@ -875,11 +898,13 @@ async def generate_anchor_options_from_answers_without_cv(
             "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
             "- Keep each option SHORT (2–5 words).\n"
             f"{variation_instructions}"
-            f"- Variation key: {variation_key}\n\n"
+            f"- Variation key (for uniqueness): {variation_key}\n\n"
             "Respond ONLY in JSON format:\n"
-            "{ \"options\": [\n" +
-            ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
-            "\n  ]\n}"
+            "{\n"
+            "  \"options\": [\n"
+            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
+            "\n  ]\n"
+            "}"
         )
 
         try:
@@ -887,30 +912,36 @@ async def generate_anchor_options_from_answers_without_cv(
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
-            formatted = [
-                opt if opt.startswith(f"{labels[i]}.") else f"{labels[i]}. {opt}"
-                for i, opt in enumerate(options[:option_count])
-            ]
-        except Exception:
-            formatted = [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
 
-        suggestions.append({
-            "parameter": attr,
-            "question": question_text,
-            "options": formatted,
-            "created_at": datetime.utcnow(),
-            "document_id": str(document_id)   
-        })
+            formatted = []
+            for i in range(option_count):
+                opt = options[i].strip() if i < len(options) else f"Option {i+1}"
+                if not opt.startswith(f"{labels[i]}."):
+                    opt = f"{labels[i]}. {opt}"
+                formatted.append(opt)
+
+            suggestions.append({
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": type_,
+                "iconfilename": iconfilename,
+                "options": formatted
+            })
+
+        except Exception as e:
+            suggestions.append({
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": type_,
+                "iconfilename": iconfilename,
+                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
+                "error": str(e)
+            })
+
+    # Update the proceed_without_cv document with the generated options
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
-        {
-            "$set": {
-                "anchor_questions_with_options": suggestions,
-                "document_id": str(document_id)  
-            }
-        }
+        {"$set": {"anchor_questions_with_options": suggestions}}
     )
 
     return {"success": True, "document_id": str(document_id), "suggestions": suggestions}
-
-
