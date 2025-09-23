@@ -816,7 +816,6 @@ async def generate_anchor_options_from_answers_without_cv(
 
     db = get_database()
 
-    # Fetch the latest proceed_without_cv document for the user
     latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
@@ -826,7 +825,6 @@ async def generate_anchor_options_from_answers_without_cv(
 
     document_id = latest_proceed[0]["_id"]
 
-    # Fetch answers linked to this document_id
     answers_cursor = db["answers_without_cv"].find(
         {"user_id": user_id, "document_id": str(document_id),
          "parameter": {"$in": [
@@ -839,7 +837,6 @@ async def generate_anchor_options_from_answers_without_cv(
     if not answers:
         raise HTTPException(status_code=404, detail="No required anchor answers found")
 
-    # Extract free-text values from answers
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -853,7 +850,6 @@ async def generate_anchor_options_from_answers_without_cv(
     random.shuffle(non_empty_texts)
     context_sample = "\n".join(non_empty_texts)
 
-    # Variation instructions
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
     style_noise_pool = [
         "use uncommon synonyms", "reorder ideas differently", "make phrasing more concise",
@@ -938,7 +934,6 @@ async def generate_anchor_options_from_answers_without_cv(
                 "error": str(e)
             })
 
-    # Update the proceed_without_cv document with the generated options
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
         {"$set": {"anchor_questions_with_options": suggestions}}

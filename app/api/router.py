@@ -14,6 +14,7 @@ import google.generativeai as genai
 import asyncio
 import json
 from datetime import datetime
+from dateutil import parser as date_parser
 from pymongo import DESCENDING
 from app.services.skill_suggestions import save_skill_suggestions
 from app.services.profile import (
@@ -447,7 +448,7 @@ async def get_latest_cv_details(
             sort=[("created_at", DESCENDING)]
         )
         if ans_doc:
-            return ans_doc.get("selected_options") or ans_doc.get("free_text")
+            return ans_doc.get("value") or ans_doc.get("free_text")
         return None
 
     if not formatted_data["certifications"]:
@@ -747,6 +748,176 @@ async def submit_anchor_attr_answers(
         "details": result
     }
 
+
+
+
+def parse_duration(duration_str):
+    try:
+        duration_str = duration_str.replace("’", "'").replace("‘", "'").strip()
+        duration_str = re.sub(r"\s+", " ", duration_str)
+        duration_str = re.sub(r"\(.*?\)", "", duration_str)
+
+        parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
+        if len(parts) != 2:
+            return None
+
+        start_str, end_str = parts[0].strip(), parts[1].strip().lower()
+
+        try:
+            start_date = datetime.strptime(start_str, "%m/%Y")
+        except:
+            start_date = date_parser.parse(start_str, fuzzy=True)
+
+        if any(word in end_str for word in ["present", "current", "now"]):
+            end_date = datetime.today()
+        else:
+            try:
+                end_date = datetime.strptime(end_str, "%m/%Y")
+            except:
+                end_date = date_parser.parse(end_str, fuzzy=True)
+
+        return start_date, end_date
+    except Exception as e:
+        print("Duration parsing error:", str(e))
+        return None
+
+def extract_years_from_summary(summary_text: str) -> float:
+    if not summary_text:
+        return 0.0
+    match = re.search(r"(?i)(over|more than|about)?\s*(\d+)\s*(\+)?\s*years? of experience", summary_text)
+    if match:
+        return float(match.group(2))
+    return 0.0
+
+def calculate_years_of_experience(work_experiences):
+    total_months = 0
+    for job in work_experiences:
+        duration_str = job.get("Duration", "")
+        parsed = parse_duration(duration_str)
+        if parsed:
+            start, end = parsed
+            months = (end.year - start.year) * 12 + (end.month - start.month) + 1
+            total_months += max(0, months)
+    return round(total_months / 12, 2)
+
+
+@router.get("/cv/summary/without")
+async def get_cv_summary_without(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    answers_collection = db["answers_without_cv"]
+    users_collection = db["users"]
+    proceed_collection = db["proceed_without_cv"]
+
+    user_id = str(current_user.get("_id"))
+    username = current_user.get("username")
+
+    user_doc = await users_collection.find_one({"username": username})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    name = user_doc.get("username")
+
+    latest_proceed = await proceed_collection.find_one(
+        {"user_id": user_id},
+        sort=[("created_at", DESCENDING)]
+    )
+    if not latest_proceed:
+        raise HTTPException(status_code=404, detail="No proceed_without_cv found")
+
+    document_id = str(latest_proceed["_id"])
+
+    parameters_map = {
+        "Technical Skills": "hard_skills",
+        "Career Objective": "career_objective",
+        "Soft Skills": "soft_skills",
+        "Education": "education",
+        "Certifications": "certifications"
+    }
+
+    formatted_data = {
+        "name": name,
+        "role": None,                
+        "career_overview": 0.0,      
+        "hard_skills": [],
+        "career_objective": "",
+        "soft_skills": [],
+        "education": [],
+        "certifications": [],
+        "tools": []
+    }
+
+    async def fetch_answers(parameter: str):
+        query = {
+            "user_id": user_id,
+            "document_id": document_id,
+            "parameter": parameter
+        }
+        cursor = answers_collection.find(query).sort("created_at", DESCENDING)
+        results = []
+        async for ans_doc in cursor:
+            answer = (
+                ans_doc.get("value")
+                or ans_doc.get("selected_options")
+                or ans_doc.get("free_text")
+            )
+            if answer:
+                if isinstance(answer, list):
+                    results.extend(answer)
+                else:
+                    results.append(answer)
+        return results
+
+    for param, field in parameters_map.items():
+        answers = await fetch_answers(param)
+        if answers:
+            if field == "career_objective":
+                formatted_data[field] = answers[0]
+            else:
+                seen = set()
+                deduped = []
+                for ans in answers:
+                    key = frozenset(ans.items()) if isinstance(ans, dict) else ans
+                    if key not in seen:
+                        seen.add(key)
+                        deduped.append(ans)
+                formatted_data[field] = deduped
+
+    exp_answers = await fetch_answers("Experience")
+    if exp_answers:
+        latest_exp = exp_answers[0]
+        if isinstance(latest_exp, str):
+
+            first_exp = latest_exp.split(",")[0].strip()
+        
+            formatted_data["role"] = first_exp.split("-")[0].strip()
+        else:
+            formatted_data["role"] = latest_exp
+
+    work_experiences = []
+    cursor = answers_collection.find(
+        {"user_id": user_id, "document_id": document_id, "parameter": "Experience"}
+    )
+    async for exp_doc in cursor:
+        val = exp_doc.get("value")
+        if isinstance(val, dict): 
+            work_experiences.append(val)
+
+    years = calculate_years_of_experience(work_experiences)
+    if years == 0.0:  
+        years = extract_years_from_summary(formatted_data["career_objective"])
+    formatted_data["career_overview"] = years
+
+    hot_tech_doc = await answers_collection.find_one(
+        {"user_id": user_id, "document_id": document_id, "parameter": "Hot Technologies"},
+        sort=[("created_at", DESCENDING)]
+    )
+    if hot_tech_doc:
+        tools_value = hot_tech_doc.get("value", [])
+        formatted_data["tools"] = tools_value
+
+
+        return {"success": True, "cv_summary_without_cv": formatted_data}
 
 
 
