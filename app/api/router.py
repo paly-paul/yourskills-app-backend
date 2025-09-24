@@ -765,14 +765,25 @@ async def submit_anchor_attr_answers(
     }
 
 
-
-
 def parse_duration(duration_str):
+    """
+    Parses a duration string into start and end datetime objects.
+    Handles both '2022 - present' and '5 years' formats.
+    """
     try:
         duration_str = duration_str.replace("’", "'").replace("‘", "'").strip()
         duration_str = re.sub(r"\s+", " ", duration_str)
-        duration_str = re.sub(r"\(.*?\)", "", duration_str)
+        duration_str = re.sub(r"\(|\)", "", duration_str)
 
+        # Handle 'X years' format
+        match_years = re.search(r"(\d+)\s+years?", duration_str, re.IGNORECASE)
+        if match_years:
+            years = int(match_years.group(1))
+            end_date = datetime.today()
+            start_date = datetime(end_date.year - years, end_date.month, end_date.day)
+            return start_date, end_date
+
+        # Handle 'Year - Year' format
         parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
         if len(parts) != 2:
             return None
@@ -780,24 +791,68 @@ def parse_duration(duration_str):
         start_str, end_str = parts[0].strip(), parts[1].strip().lower()
 
         try:
-            start_date = datetime.strptime(start_str, "%m/%Y")
-        except:
             start_date = date_parser.parse(start_str, fuzzy=True)
+        except Exception:
+            return None
 
         if any(word in end_str for word in ["present", "current", "now"]):
             end_date = datetime.today()
         else:
             try:
-                end_date = datetime.strptime(end_str, "%m/%Y")
-            except:
                 end_date = date_parser.parse(end_str, fuzzy=True)
+            except Exception:
+                return None
 
         return start_date, end_date
     except Exception as e:
         print("Duration parsing error:", str(e))
         return None
 
+def parse_experience_string(exp_string):
+    """
+    Parses a comma-separated experience string into a list of job dictionaries.
+    Handles both "Title - Company (Year - Year)" and "Title - Company X years" formats.
+    """
+    work_experiences = []
+    # Split by comma, ensuring not to split on commas inside parentheses if any
+    roles = [r.strip() for r in re.split(r",(?![^()]*\))", exp_string)]
+    
+    for role_str in roles:
+        # Regex for "Title - Company (Year - Year)" format
+        match_dates = re.search(r"^(.*?)\s*\((.*?)\)$", role_str)
+        if match_dates:
+            title_with_company = match_dates.group(1).strip()
+            duration_part = match_dates.group(2).strip()
+            
+            title_parts = title_with_company.rsplit('-', 1)
+            job_title = title_parts[0].strip()
+            
+            work_experiences.append({
+                "Title": job_title,
+                "Duration": duration_part
+            })
+            continue
+
+        # Regex for "Title - Company X years" format
+        match_years = re.search(r"^(.*?)\s*(\d+\s*years?)$", role_str, re.IGNORECASE)
+        if match_years:
+            title_with_company = match_years.group(1).strip()
+            duration_part = match_years.group(2).strip()
+            
+            # The title is the part before the last '-'
+            title_parts = title_with_company.rsplit('-', 1)
+            job_title = title_parts[0].strip()
+
+            work_experiences.append({
+                "Title": job_title,
+                "Duration": duration_part
+            })
+            continue
+
+    return work_experiences
+
 def extract_years_from_summary(summary_text: str) -> float:
+    # ... (function remains unchanged)
     if not summary_text:
         return 0.0
     match = re.search(r"(?i)(over|more than|about)?\s*(\d+)\s*(\+)?\s*years? of experience", summary_text)
@@ -806,16 +861,16 @@ def extract_years_from_summary(summary_text: str) -> float:
     return 0.0
 
 def calculate_years_of_experience(work_experiences):
+    # ... (function remains unchanged)
     total_months = 0
     for job in work_experiences:
         duration_str = job.get("Duration", "")
         parsed = parse_duration(duration_str)
         if parsed:
             start, end = parsed
-            months = (end.year - start.year) * 12 + (end.month - start.month) + 1
+            months = (end.year - start.year) * 12 + (end.month - start.month)
             total_months += max(0, months)
     return round(total_months / 12, 2)
-
 
 @router.get("/cv/summary/without")
 async def get_cv_summary_without(
@@ -853,8 +908,8 @@ async def get_cv_summary_without(
 
     formatted_data = {
         "name": name,
-        "role": None,                
-        "career_overview": 0.0,      
+        "role": None,
+        "career_overview": 0.0,
         "hard_skills": [],
         "career_objective": "",
         "soft_skills": [],
@@ -893,35 +948,35 @@ async def get_cv_summary_without(
                 seen = set()
                 deduped = []
                 for ans in answers:
-                    key = frozenset(ans.items()) if isinstance(ans, dict) else ans
+                    key = tuple(sorted(ans.items())) if isinstance(ans, dict) else ans
                     if key not in seen:
                         seen.add(key)
                         deduped.append(ans)
                 formatted_data[field] = deduped
-
-    exp_answers = await fetch_answers("Experience")
-    if exp_answers:
-        latest_exp = exp_answers[0]
-        if isinstance(latest_exp, str):
-
-            first_exp = latest_exp.split(",")[0].strip()
-        
-            formatted_data["role"] = first_exp.split("-")[0].strip()
-        else:
-            formatted_data["role"] = latest_exp
-
+    
     work_experiences = []
-    cursor = answers_collection.find(
-        {"user_id": user_id, "document_id": document_id, "parameter": "Experience"}
+    exp_doc = await answers_collection.find_one(
+        {"user_id": user_id, "document_id": document_id, "parameter": "Experience"},
+        sort=[("created_at", DESCENDING)]
     )
-    async for exp_doc in cursor:
-        val = exp_doc.get("value")
-        if isinstance(val, dict): 
-            work_experiences.append(val)
+    
+    if exp_doc and isinstance(exp_doc.get("value"), str):
+        experience_string = exp_doc["value"]
+        work_experiences = parse_experience_string(experience_string)
+        
+        if work_experiences:
+            formatted_data["role"] = work_experiences[0].get("Title")
+            
+    elif exp_doc and isinstance(exp_doc.get("value"), list):
+        work_experiences = exp_doc["value"]
+        if work_experiences:
+            formatted_data["role"] = work_experiences[0].get("Title")
 
     years = calculate_years_of_experience(work_experiences)
-    if years == 0.0:  
+    
+    if years == 0.0:
         years = extract_years_from_summary(formatted_data["career_objective"])
+        
     formatted_data["career_overview"] = years
 
     hot_tech_doc = await answers_collection.find_one(
@@ -932,9 +987,7 @@ async def get_cv_summary_without(
         tools_value = hot_tech_doc.get("value", [])
         formatted_data["tools"] = tools_value
 
-
-        return {"success": True, "cv_summary_without_cv": formatted_data}
-
+    return {"success": True, "cv_summary_without_cv": formatted_data}
 
 
 #____________________________________________________________________________________________________________________________________________________
