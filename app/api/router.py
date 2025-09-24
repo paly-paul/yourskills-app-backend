@@ -423,7 +423,23 @@ async def get_latest_cv_details(
                 if end > latest_end:
                     latest_end = end
                     job_role = job.get("Role")
+    education_list = parsed_data.get("Education", []) or []
+    
+    def get_year(education_entry):
+        try:
+            year_str = education_entry.get("Year", "")
+            if '-' in year_str or '–' in year_str:
+                end_year = year_str.split('-')[-1].strip()
+                return int(end_year)
+            return int(re.search(r'\d{4}', year_str).group())
+        except (AttributeError, ValueError):
+            return 0  
 
+    if education_list:
+        education_list.sort(key=get_year, reverse=True)
+        latest_education = [education_list[0]]
+    else:
+        latest_education = []
 
     formatted_data = {
         "name": parsed_data.get("Name"),
@@ -432,7 +448,7 @@ async def get_latest_cv_details(
         "hard_skills": parsed_data.get("Skills", {}).get("HardSkills", []),
         "soft_skills": parsed_data.get("Skills", {}).get("SoftSkills", []),
         "tools": parsed_data.get("Skills", {}).get("Tools", []),
-        "education": parsed_data.get("Education", []),
+        "education": latest_education,
         "career_overview": parsed_data.get("YearsOfExperience"),
         "certifications": parsed_data.get("Certifications", [])
     }
@@ -448,7 +464,7 @@ async def get_latest_cv_details(
             sort=[("created_at", DESCENDING)]
         )
         if ans_doc:
-            return ans_doc.get("value") or ans_doc.get("free_text")
+            return ans_doc.get("value") or ans_doc.get("selected_options") or ans_doc.get("free_text")
         return None
 
     if not formatted_data["certifications"]:
