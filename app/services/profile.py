@@ -358,35 +358,21 @@ async def get_audience_questions_service_without_cv(db, current_user):
         "questions": job_questions_with_options
     }
 
-async def get_questions_by_parameters(
-    db,
-    current_user,
-    attribute_type: str,
-    parameters: list,
-    audience_type: str = None  
-):
-    """
-    Fetch specific questions from anchor attributes based on parameters & audience type.
-    If audience_type is not provided, fetch it from the latest proceed_without_cv document.
-    Also returns the latest document _id as doc_id.
-    """
+async def get_questions_by_parameters(db, current_user, attribute_type: str, parameters: list):
+    """Fetch specific questions from anchor attributes based on parameters & audience type."""
+    uploads_collection = db["uploads"]
     questions_collection = db["questions"]
-    proceed_collection = db["proceed_without_cv"]
-    if not audience_type:
-        latest_record = await proceed_collection.find_one(
-            {"user_id": str(current_user["_id"])},
-            sort=[("_id", -1)]
-        )
-        if not latest_record or "audienceType" not in latest_record:
-            raise HTTPException(status_code=404, detail="Audience type not found for user")
-        audience_type = latest_record["audienceType"]
-        doc_id = str(latest_record["_id"])
-    else:
-        latest_record = await proceed_collection.find_one(
-            {"user_id": str(current_user["_id"])},
-            sort=[("_id", -1)]
-        )
-        doc_id = str(latest_record["_id"]) if latest_record else None
+
+    latest_cv = await uploads_collection.find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+    if not latest_cv or "parsed_data" not in latest_cv:
+        raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+    parsed_data = latest_cv["parsed_data"]
+
+    audience_type = predict_audience_type(parsed_data)
 
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
@@ -402,6 +388,8 @@ async def get_questions_by_parameters(
             status_code=404,
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
+
+
     results = []
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
@@ -418,9 +406,10 @@ async def get_questions_by_parameters(
     return {
         "success": True,
         "audienceType": audience_type,
-        "doc_id": doc_id,
         "questions": results,
     }
+
+
 
 async def get_remaining_anchor_questions_without_cv(
     db, current_user, model, exclude_params=None, attribute_type=None
