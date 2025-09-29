@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+gemini_model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 def get_llm_model():
     return gemini_model
@@ -86,6 +86,7 @@ async def login(user: UserLogin, db=Depends(get_database)):
         "token": access_token,
         "tenant_id": db_user["tenant_id"]
     }
+
 
 @router.get("/profile")
 def get_profile(current_user=Depends(get_current_user)):
@@ -369,6 +370,8 @@ async def submit_anchor_attr_answers(
     )
 
 
+
+
 @router.get("/cv/latest/details")
 async def get_latest_cv_details(
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -392,8 +395,6 @@ async def get_latest_cv_details(
     work_experiences = parsed_data.get("WorkExperience", []) or []
 
     def parse_duration(duration_str: str):
-        import re
-        from dateutil import parser as date_parser
         try:
             parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
             if len(parts) != 2:
@@ -411,9 +412,7 @@ async def get_latest_cv_details(
     job_role = None
     latest_end = datetime.min
 
-    
     if parsed_data.get("YearsOfExperience", 0) == 0:
-    
         job_role = "Fresher"
     else:
         for job in work_experiences:
@@ -423,8 +422,9 @@ async def get_latest_cv_details(
                 if end > latest_end:
                     latest_end = end
                     job_role = job.get("Role")
+
     education_list = parsed_data.get("Education", []) or []
-    
+
     def get_year(education_entry):
         try:
             year_str = education_entry.get("Year", "")
@@ -433,13 +433,37 @@ async def get_latest_cv_details(
                 return int(end_year)
             return int(re.search(r'\d{4}', year_str).group())
         except (AttributeError, ValueError):
-            return 0  
+            return 0
 
     if education_list:
         education_list.sort(key=get_year, reverse=True)
         latest_education = [education_list[0]]
     else:
         latest_education = []
+
+    # 🔹 Certification transformer
+    def transform_certifications(certs):
+        formatted = []
+        if not certs:
+            return formatted
+
+        for cert in certs:
+            if isinstance(cert, str):
+                parts = [p.strip() for p in re.split(r"\s*[-–]\s*", cert, maxsplit=1)]
+                name = parts[0] if parts else ""
+                issuer = parts[1] if len(parts) > 1 else ""
+                formatted.append({
+                    "Name": name,
+                    "Issuer": issuer,
+                    "Year": ""
+                })
+            elif isinstance(cert, dict):
+                formatted.append({
+                    "Name": cert.get("Name", ""),
+                    "Issuer": cert.get("Issuer", ""),
+                    "Year": cert.get("Year", "")
+                })
+        return formatted
 
     formatted_data = {
         "name": parsed_data.get("Name"),
@@ -450,7 +474,7 @@ async def get_latest_cv_details(
         "tools": parsed_data.get("Skills", {}).get("Tools", []),
         "education": latest_education,
         "career_overview": parsed_data.get("YearsOfExperience"),
-        "certifications": parsed_data.get("Certifications", [])
+        "certifications": transform_certifications(parsed_data.get("Certifications", []))
     }
 
     async def fetch_answer(parameter: str, section="Cv Missing"):
@@ -468,7 +492,8 @@ async def get_latest_cv_details(
         return None
 
     if not formatted_data["certifications"]:
-        formatted_data["certifications"] = await fetch_answer("Certifications")
+        raw_certs = await fetch_answer("Certifications")
+        formatted_data["certifications"] = transform_certifications(raw_certs)
 
     if not formatted_data["hard_skills"]:
         formatted_data["hard_skills"] = await fetch_answer("Technical Skills")
@@ -488,10 +513,7 @@ async def get_latest_cv_details(
     if not formatted_data["Summary"]:
         formatted_data["Summary"] = await fetch_answer("Career Objective")
 
-
     return {"success": True, "cv_details": formatted_data}
-
-
 
 #_______________________________________________________________________________________________________________________________________________________
 #____________________________________________________________________________________________________________________________________________________________________________
@@ -939,11 +961,37 @@ async def get_cv_summary_without(
                     results.append(answer)
         return results
 
+    # 🔹 Certification transformer (same as first API)
+    def transform_certifications(certs):
+        formatted = []
+        if not certs:
+            return formatted
+        for cert in certs:
+            if isinstance(cert, str):
+                parts = [p.strip() for p in re.split(r"\s*[-–]\s*", cert, maxsplit=1)]
+                name = parts[0] if parts else ""
+                issuer = parts[1] if len(parts) > 1 else ""
+                formatted.append({
+                    "Name": name,
+                    "Issuer": issuer,
+                    "Year": ""
+                })
+            elif isinstance(cert, dict):
+                formatted.append({
+                    "Name": cert.get("Name", ""),
+                    "Issuer": cert.get("Issuer", ""),
+                    "Year": cert.get("Year", "")
+                })
+        return formatted
+
+    # 🔹 Fetch all answers and dedupe
     for param, field in parameters_map.items():
         answers = await fetch_answers(param)
         if answers:
             if field == "career_objective":
                 formatted_data[field] = answers[0]
+            elif field == "certifications":
+                formatted_data[field] = transform_certifications(answers)
             else:
                 seen = set()
                 deduped = []
@@ -953,32 +1001,33 @@ async def get_cv_summary_without(
                         seen.add(key)
                         deduped.append(ans)
                 formatted_data[field] = deduped
-    
+
+    # 🔹 Work experience handling
     work_experiences = []
     exp_doc = await answers_collection.find_one(
         {"user_id": user_id, "document_id": document_id, "parameter": "Experience"},
         sort=[("created_at", DESCENDING)]
     )
-    
+
     if exp_doc and isinstance(exp_doc.get("value"), str):
         experience_string = exp_doc["value"]
         work_experiences = parse_experience_string(experience_string)
-        
         if work_experiences:
             formatted_data["role"] = work_experiences[0].get("Title")
-            
+
     elif exp_doc and isinstance(exp_doc.get("value"), list):
         work_experiences = exp_doc["value"]
         if work_experiences:
             formatted_data["role"] = work_experiences[0].get("Title")
 
     years = calculate_years_of_experience(work_experiences)
-    
+
     if years == 0.0:
         years = extract_years_from_summary(formatted_data["career_objective"])
-        
+
     formatted_data["career_overview"] = years
 
+    # 🔹 Hot Technologies → Tools
     hot_tech_doc = await answers_collection.find_one(
         {"user_id": user_id, "document_id": document_id, "parameter": "Hot Technologies"},
         sort=[("created_at", DESCENDING)]
@@ -988,7 +1037,6 @@ async def get_cv_summary_without(
         formatted_data["tools"] = tools_value
 
     return {"success": True, "cv_summary_without_cv": formatted_data}
-
 
 #____________________________________________________________________________________________________________________________________________________
 

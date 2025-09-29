@@ -20,38 +20,58 @@ from bson import ObjectId
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-flash")
-
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 def parse_duration(duration_str):
     try:
-        duration_str = duration_str.replace("’", "'").replace("‘", "'").strip()
+        # Normalize quotes and dashes
+        duration_str = duration_str.replace("’", "'").replace("‘", "'")
+        duration_str = re.sub(r"[–—−]", "-", duration_str).strip()
         duration_str = re.sub(r"\s+", " ", duration_str)
-        duration_str = re.sub(r"\(.*?\)", "", duration_str)
+        duration_str = re.sub(r"\(.*?\)", "", duration_str)  # remove parentheses
 
-        parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
+        # Handle "Since <date>"
+        if duration_str.lower().startswith("since"):
+            start_str = duration_str[5:].strip()
+            try:
+                start_date = date_parser.parse(start_str, fuzzy=True)
+            except:
+                return None
+            return start_date, datetime.today()
+
+        # Split ranges like "Apr'19 - Jun'23"
+        parts = re.split(r"\s*-\s*", duration_str)
         if len(parts) != 2:
             return None
 
         start_str, end_str = parts[0].strip(), parts[1].strip().lower()
 
+        # Parse start date
         try:
-            start_date = datetime.strptime(start_str, "%m/%Y")
+            start_date = datetime.strptime(start_str, "%b'%y")
         except:
-            start_date = date_parser.parse(start_str, fuzzy=True)
+            try:
+                start_date = datetime.strptime(start_str, "%b %y")
+            except:
+                start_date = date_parser.parse(start_str, fuzzy=True)
 
+        # Parse end date
         if any(word in end_str for word in ["present", "current", "now"]):
             end_date = datetime.today()
         else:
             try:
-                end_date = datetime.strptime(end_str, "%m/%Y")
+                end_date = datetime.strptime(end_str, "%b'%y")
             except:
-                end_date = date_parser.parse(end_str, fuzzy=True)
+                try:
+                    end_date = datetime.strptime(end_str, "%b %y")
+                except:
+                    end_date = date_parser.parse(end_str, fuzzy=True)
 
         return start_date, end_date
     except Exception as e:
         print("Duration parsing error:", str(e))
         return None
+
 def extract_years_from_summary(summary_text: str) -> float:
     """
     Extract years of experience directly from the Summary section
