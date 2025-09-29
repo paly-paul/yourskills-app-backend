@@ -508,7 +508,26 @@ async def get_latest_cv_details(
         formatted_data["role"] = await fetch_answer("Experience")
 
     if not formatted_data["education"]:
-        formatted_data["education"] = await fetch_answer("Education")
+        edu_answer = await fetch_answer("Education")
+        if edu_answer:
+            # Handle case when education comes from questionnaire
+            if isinstance(edu_answer, list):
+                formatted_data["education"] = []
+                for entry in edu_answer:
+                    formatted_data["education"].append({
+                        "Degree": entry.get("selectedField") or entry.get("selected") or "",
+                        "Institution": "",   # Not available in questionnaire
+                        "Grade": "",
+                        "Year": ""
+                    })
+            elif isinstance(edu_answer, dict):
+                formatted_data["education"] = [{
+                    "Degree": edu_answer.get("selectedField") or edu_answer.get("selected") or "",
+                    "Institution": "",
+                    "Grade": "",
+                    "Year": ""
+                }]
+
 
     if not formatted_data["Summary"]:
         formatted_data["Summary"] = await fetch_answer("Career Objective")
@@ -961,7 +980,7 @@ async def get_cv_summary_without(
                     results.append(answer)
         return results
 
-    # 🔹 Certification transformer (same as first API)
+    # 🔹 Certification transformer
     def transform_certifications(certs):
         formatted = []
         if not certs:
@@ -984,7 +1003,7 @@ async def get_cv_summary_without(
                 })
         return formatted
 
-    # 🔹 Fetch all answers and dedupe
+    # 🔹 Fetch all answers and normalize
     for param, field in parameters_map.items():
         answers = await fetch_answers(param)
         if answers:
@@ -992,7 +1011,35 @@ async def get_cv_summary_without(
                 formatted_data[field] = answers[0]
             elif field == "certifications":
                 formatted_data[field] = transform_certifications(answers)
+            elif field == "education":
+                # 🔹 Normalize education into fixed 4-field structure
+                normalized_education = []
+                for ans in answers:
+                    if isinstance(ans, dict):
+                        normalized_education.append({
+                            "Degree": ans.get("selectedField") or ans.get("selected") or "",
+                            "Institution": "",
+                            "Grade": "",
+                            "Year": ""
+                        })
+                    else:
+                        normalized_education.append({
+                            "Degree": str(ans),
+                            "Institution": "",
+                            "Grade": "",
+                            "Year": ""
+                        })
+                # Deduplicate education
+                seen_degrees = set()
+                deduped_edu = []
+                for edu in normalized_education:
+                    degree = edu["Degree"]
+                    if degree not in seen_degrees and degree:
+                        seen_degrees.add(degree)
+                        deduped_edu.append(edu)
+                formatted_data[field] = deduped_edu
             else:
+                # Deduplicate other list fields
                 seen = set()
                 deduped = []
                 for ans in answers:
@@ -1021,10 +1068,8 @@ async def get_cv_summary_without(
             formatted_data["role"] = work_experiences[0].get("Title")
 
     years = calculate_years_of_experience(work_experiences)
-
     if years == 0.0:
         years = extract_years_from_summary(formatted_data["career_objective"])
-
     formatted_data["career_overview"] = years
 
     # 🔹 Hot Technologies → Tools
@@ -1037,7 +1082,6 @@ async def get_cv_summary_without(
         formatted_data["tools"] = tools_value
 
     return {"success": True, "cv_summary_without_cv": formatted_data}
-
 #____________________________________________________________________________________________________________________________________________________
 
 #-------------------------------------Api for Model prediction Data ------------------------------------------------------------------------------
