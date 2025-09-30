@@ -809,26 +809,35 @@ async def submit_anchor_attr_answers(
 def parse_duration(duration_str):
     """
     Parses a duration string into start and end datetime objects.
-    Handles both '2022 - present' and '5 years' formats.
+    Handles 'X years', 'X months', and 'March 2022 - May 2023' formats.
     """
     try:
         duration_str = duration_str.replace("’", "'").replace("‘", "'").strip()
         duration_str = re.sub(r"\s+", " ", duration_str)
         duration_str = re.sub(r"\(|\)", "", duration_str)
 
-        # Handle 'X years' format
-        match_years = re.search(r"(\d+)\s+years?", duration_str, re.IGNORECASE)
-        if match_years:
-            years = int(match_years.group(1))
+        # Handle "X years" / "X months"
+        match = re.search(r"(\d+)\s*(year|month)", duration_str, re.IGNORECASE)
+        if match:
+            num, unit = match.groups()
+            num = int(num)
             end_date = datetime.today()
-            start_date = datetime(end_date.year - years, end_date.month, end_date.day)
+            if "year" in unit.lower():
+                start_date = datetime(end_date.year - num, end_date.month, end_date.day)
+            else:  # months
+                months_back = num
+                year = end_date.year - (months_back // 12)
+                month = end_date.month - (months_back % 12)
+                if month <= 0:
+                    year -= 1
+                    month += 12
+                start_date = datetime(year, month, 1)
             return start_date, end_date
 
-        # Handle 'Year - Year' format
+        # Handle "March 2022 - May 2023"
         parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
         if len(parts) != 2:
             return None
-
         start_str, end_str = parts[0].strip(), parts[1].strip().lower()
 
         try:
@@ -845,55 +854,39 @@ def parse_duration(duration_str):
                 return None
 
         return start_date, end_date
-    except Exception as e:
-        print("Duration parsing error:", str(e))
+    except Exception:
         return None
 
-def parse_experience_string(exp_string):
+def parse_experience_string(exp_string: str):
     """
     Parses a comma-separated experience string into a list of job dictionaries.
-    Handles both "Title - Company (Year - Year)" and "Title - Company X years" formats.
+    Handles free text like 'Intern for 6 months' or 'Internship from March 2022 to May 2023'.
     """
     work_experiences = []
-    # Split by comma, ensuring not to split on commas inside parentheses if any
     roles = [r.strip() for r in re.split(r",(?![^()]*\))", exp_string)]
-    
+
     for role_str in roles:
-        # Regex for "Title - Company (Year - Year)" format
-        match_dates = re.search(r"^(.*?)\s*\((.*?)\)$", role_str)
-        if match_dates:
-            title_with_company = match_dates.group(1).strip()
-            duration_part = match_dates.group(2).strip()
-            
-            title_parts = title_with_company.rsplit('-', 1)
-            job_title = title_parts[0].strip()
-            
-            work_experiences.append({
-                "Title": job_title,
-                "Duration": duration_part
-            })
-            continue
+        # Extract role (remove trailing "for ...", "with ...", "at ...")
+        role = re.sub(r"\b(for|with|at)\b.*", "", role_str, flags=re.IGNORECASE).strip()
 
-        # Regex for "Title - Company X years" format
-        match_years = re.search(r"^(.*?)\s*(\d+\s*years?)$", role_str, re.IGNORECASE)
-        if match_years:
-            title_with_company = match_years.group(1).strip()
-            duration_part = match_years.group(2).strip()
-            
-            # The title is the part before the last '-'
-            title_parts = title_with_company.rsplit('-', 1)
-            job_title = title_parts[0].strip()
+        # Extract explicit date range
+        date_match = re.search(r"([A-Za-z]+\s+\d{4})\s*(?:-|to)\s*([A-Za-z]+\s+\d{4})", role_str, re.IGNORECASE)
+        if date_match:
+            duration = f"{date_match.group(1)} - {date_match.group(2)}"
+        else:
+            # Extract numeric duration like "6 months", "2 years"
+            dur_match = re.search(r"(\d+)\s*(year|month)", role_str, re.IGNORECASE)
+            duration = dur_match.group(0) if dur_match else ""
 
-            work_experiences.append({
-                "Title": job_title,
-                "Duration": duration_part
-            })
-            continue
+        work_experiences.append({
+            "Title": role,
+            "Duration": duration
+        })
 
     return work_experiences
 
+
 def extract_years_from_summary(summary_text: str) -> float:
-    # ... (function remains unchanged)
     if not summary_text:
         return 0.0
     match = re.search(r"(?i)(over|more than|about)?\s*(\d+)\s*(\+)?\s*years? of experience", summary_text)
@@ -902,15 +895,30 @@ def extract_years_from_summary(summary_text: str) -> float:
     return 0.0
 
 def calculate_years_of_experience(work_experiences):
-    # ... (function remains unchanged)
     total_months = 0
     for job in work_experiences:
         duration_str = job.get("Duration", "")
+        if not duration_str:
+            continue
+
+        # Handle "6 months", "2 years"
+        match = re.search(r"(\d+)\s*(year|month)", duration_str, re.IGNORECASE)
+        if match:
+            num, unit = match.groups()
+            num = int(num)
+            if "year" in unit.lower():
+                total_months += num * 12
+            elif "month" in unit.lower():
+                total_months += num
+            continue
+
+        # Handle "March 2022 - May 2023"
         parsed = parse_duration(duration_str)
         if parsed:
             start, end = parsed
             months = (end.year - start.year) * 12 + (end.month - start.month)
             total_months += max(0, months)
+
     return round(total_months / 12, 2)
 
 @router.get("/cv/summary/without")
@@ -960,11 +968,7 @@ async def get_cv_summary_without(
     }
 
     async def fetch_answers(parameter: str):
-        query = {
-            "user_id": user_id,
-            "document_id": document_id,
-            "parameter": parameter
-        }
+        query = {"user_id": user_id, "document_id": document_id, "parameter": parameter}
         cursor = answers_collection.find(query).sort("created_at", DESCENDING)
         results = []
         async for ans_doc in cursor:
@@ -980,7 +984,6 @@ async def get_cv_summary_without(
                     results.append(answer)
         return results
 
-    # 🔹 Certification transformer
     def transform_certifications(certs):
         formatted = []
         if not certs:
@@ -1003,7 +1006,6 @@ async def get_cv_summary_without(
                 })
         return formatted
 
-    # 🔹 Fetch all answers and normalize
     for param, field in parameters_map.items():
         answers = await fetch_answers(param)
         if answers:
@@ -1012,7 +1014,6 @@ async def get_cv_summary_without(
             elif field == "certifications":
                 formatted_data[field] = transform_certifications(answers)
             elif field == "education":
-                # 🔹 Normalize education into fixed 4-field structure
                 normalized_education = []
                 for ans in answers:
                     if isinstance(ans, dict):
@@ -1029,7 +1030,7 @@ async def get_cv_summary_without(
                             "Grade": "",
                             "Year": ""
                         })
-                # Deduplicate education
+
                 seen_degrees = set()
                 deduped_edu = []
                 for edu in normalized_education:
@@ -1039,7 +1040,7 @@ async def get_cv_summary_without(
                         deduped_edu.append(edu)
                 formatted_data[field] = deduped_edu
             else:
-                # Deduplicate other list fields
+
                 seen = set()
                 deduped = []
                 for ans in answers:
@@ -1049,7 +1050,6 @@ async def get_cv_summary_without(
                         deduped.append(ans)
                 formatted_data[field] = deduped
 
-    # 🔹 Work experience handling
     work_experiences = []
     exp_doc = await answers_collection.find_one(
         {"user_id": user_id, "document_id": document_id, "parameter": "Experience"},
@@ -1060,19 +1060,18 @@ async def get_cv_summary_without(
         experience_string = exp_doc["value"]
         work_experiences = parse_experience_string(experience_string)
         if work_experiences:
-            formatted_data["role"] = work_experiences[0].get("Title")
+            formatted_data["role"] = work_experiences[-1].get("Title")
 
     elif exp_doc and isinstance(exp_doc.get("value"), list):
         work_experiences = exp_doc["value"]
         if work_experiences:
-            formatted_data["role"] = work_experiences[0].get("Title")
+            formatted_data["role"] = work_experiences[-1].get("Title")
 
     years = calculate_years_of_experience(work_experiences)
     if years == 0.0:
         years = extract_years_from_summary(formatted_data["career_objective"])
     formatted_data["career_overview"] = years
 
-    # 🔹 Hot Technologies → Tools
     hot_tech_doc = await answers_collection.find_one(
         {"user_id": user_id, "document_id": document_id, "parameter": "Hot Technologies"},
         sort=[("created_at", DESCENDING)]
@@ -1082,6 +1081,9 @@ async def get_cv_summary_without(
         formatted_data["tools"] = tools_value
 
     return {"success": True, "cv_summary_without_cv": formatted_data}
+
+
+
 #____________________________________________________________________________________________________________________________________________________
 
 #-------------------------------------Api for Model prediction Data ------------------------------------------------------------------------------
