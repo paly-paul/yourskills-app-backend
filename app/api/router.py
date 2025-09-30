@@ -947,9 +947,10 @@ async def get_cv_summary_without(
 
     document_id = str(latest_proceed["_id"])
 
+    # DB query uses Career Objective, map it to "summary" internally
     parameters_map = {
         "Technical Skills": "hard_skills",
-        "Career Objective": "career_objective",
+        "Career Objective": "summary",
         "Soft Skills": "soft_skills",
         "Education": "education",
         "Certifications": "certifications"
@@ -960,7 +961,7 @@ async def get_cv_summary_without(
         "role": None,
         "career_overview": 0.0,
         "hard_skills": [],
-        "career_objective": "",
+        "summary": "",   # internal key
         "soft_skills": [],
         "education": [],
         "certifications": [],
@@ -1009,7 +1010,7 @@ async def get_cv_summary_without(
     for param, field in parameters_map.items():
         answers = await fetch_answers(param)
         if answers:
-            if field == "career_objective":
+            if field == "summary":
                 formatted_data[field] = answers[0]
             elif field == "certifications":
                 formatted_data[field] = transform_certifications(answers)
@@ -1040,7 +1041,6 @@ async def get_cv_summary_without(
                         deduped_edu.append(edu)
                 formatted_data[field] = deduped_edu
             else:
-
                 seen = set()
                 deduped = []
                 for ans in answers:
@@ -1069,7 +1069,7 @@ async def get_cv_summary_without(
 
     years = calculate_years_of_experience(work_experiences)
     if years == 0.0:
-        years = extract_years_from_summary(formatted_data["career_objective"])
+        years = extract_years_from_summary(formatted_data["summary"])
     formatted_data["career_overview"] = years
 
     hot_tech_doc = await answers_collection.find_one(
@@ -1080,9 +1080,11 @@ async def get_cv_summary_without(
         tools_value = hot_tech_doc.get("value", [])
         formatted_data["tools"] = tools_value
 
-    return {"success": True, "cv_summary_without_cv": formatted_data}
+    # Rename "summary" -> "Summary" for response
+    response_data = formatted_data.copy()
+    response_data["Summary"] = response_data.pop("summary")
 
-
+    return {"success": True, "cv_summary_without_cv": response_data}
 
 #____________________________________________________________________________________________________________________________________________________
 
