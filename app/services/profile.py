@@ -500,6 +500,7 @@ async def get_remaining_anchor_questions_without_cv(
                         "parameter": param_str,
                         "question": aq.get("question"),
                         "options": aq.get("options", []),
+                        "iconfilename": aq.get("iconfilename"),  # ✅ added
                     }
                 )
                 seen_parameters.add(param_str)
@@ -520,6 +521,7 @@ async def get_remaining_anchor_questions_without_cv(
                 "parameter": param_str,
                 "question": item.get("question"),
                 "options": item.get("options", []),
+                "iconfilename": item.get("iconfilename"),  # ✅ added
             }
         )
         seen_parameters.add(param_str)
