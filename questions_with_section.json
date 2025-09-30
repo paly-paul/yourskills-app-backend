@@ -5,7 +5,7 @@
       "parameter": "Education",
       "question": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
       "type": "Single-select + Dropdown",
-      "iconFileName": "Suitcase",
+      "iconfilename": "Suitcase",
       "options": [
         {
           "label": "High School",
@@ -117,25 +117,25 @@
       "parameter": "Experience",
       "question": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
       "type": "Short text",
-      "iconFileName": "Office Desk"
+      "iconfilename": "Office Desk"
     },
     {
       "parameter": "Technical Skills",
       "question": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
       "type": "Multiple select + Add New",
-      "iconFileName": "Assessment"
+      "iconfilename": "Assessment"
     },
     {
       "parameter": "Soft Skills",
       "question": "Which soft skills come naturally to you — like how you communicate, solve problems, or support your team?",
       "type": "Multiple select + Add New",
-      "iconFileName": "Soft Skills"
+      "iconfilename": "Soft Skills"
     },
     {
       "parameter": "Certifications",
       "question": "Have you done any certifications, courses, or attended workshops recently?",
       "type": "Multiple select + add Tag",
-      "iconFileName": "Certificate",
+      "iconfilename": "Certificate",
       "options": ["Google Data Analytics - Coursera",
                   "Scrum Master – Scrum Alliance",
                   "UI/UX Bootcamp – Springboard"]
@@ -144,7 +144,7 @@
       "parameter": "Salary Grades",
       "question": "If you’re comfortable sharing, what’s your current or expected salary range? Totally okay to skip if you’d rather not say!",
       "type": "Single Select",
-      "iconFileName": "Salary",
+      "iconfilename": "Salary",
       "options": [
         "< ₹5L / <$10K",
         "₹5L – ₹10L",
@@ -158,7 +158,7 @@
       "parameter": "Projects",
       "question": "Have you worked on any cool projects (college, work, or side projects) that you’d love to share? Big or small – all count!",
       "type": "Multiple select + add Tag",
-      "iconFileName": "Task Management",
+      "iconfilename": "Task Management",
       "options": ["Built a to-do app in React",
                   "Led a team to develop a chatbot",
                   "Conducted a user research study for an NGO"]
@@ -167,7 +167,7 @@
       "parameter": "Languages Known",
       "question": "What languages can you speak, read, or write? Let me know your level — like fluent, basic, or somewhere in between.",
       "type": "Multiple select + Dropdown",
-      "iconFileName": "Translation",
+      "iconfilename": "Translation",
       "options": [
         "English",
         "Hindi",
@@ -197,7 +197,7 @@
       "parameter": "Career Objective",
       "question": "If you had to describe yourself in your current career — like what you do, what drives you, and what kind of work excites you — how would you put it in a few lines?",
       "type": "Short text",
-      "iconFileName": "Career Path"
+      "iconfilename": "Career Path"
     }
   ],
 
@@ -547,7 +547,7 @@
         },
         {
           "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "question": "Outside studies, have you been part of anything that gave you a fresh perspective or helped others?",
           "iconfilename": "Unity",
           "options": [
             "Volunteered for a social cause or NGO",

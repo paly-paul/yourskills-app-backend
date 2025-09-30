@@ -21,7 +21,7 @@ from app.services.profile import (
     get_missing_field_questions_service,
     get_audience_questions_service,
     get_audience_questions_service_without_cv,
-    get_questions_excluding_parameters, get_questions_by_parameters,
+    get_questions_excluding_parameters, get_questions_by_parameters,get_questions_by_parameters_withoutcv,
     get_remaining_anchor_questions_without_cv
 )
 from app.utils.cv_extractor import generate_job_attribute_options
@@ -718,7 +718,7 @@ async def get_anchor_questions_by_user_parameters(
 
     audience_type = record["audienceType"]
 
-    return await get_questions_by_parameters(
+    return await get_questions_by_parameters_withoutcv(
         db,
         current_user,
         "Anchor attributes",

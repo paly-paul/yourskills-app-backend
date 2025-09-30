@@ -836,6 +836,7 @@ async def generate_anchor_options_from_answers_without_cv(
 
     db = get_database()
 
+    # Fetch the latest proceed_without_cv document for the user
     latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
@@ -843,20 +844,29 @@ async def generate_anchor_options_from_answers_without_cv(
     if not latest_proceed:
         raise HTTPException(status_code=404, detail="No proceed_without_cv found for user")
 
-    document_id = latest_proceed[0]["_id"]
+    document = latest_proceed[0]
+    document_id = document["_id"]
+    audience_type = document.get("audienceType", "General")
 
+    # Fetch answers linked to this document_id
     answers_cursor = db["answers_without_cv"].find(
-        {"user_id": user_id, "document_id": str(document_id),
-         "parameter": {"$in": [
-            "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-            "Achievements"
-         ]}}
+        {
+            "user_id": user_id,
+            "document_id": str(document_id),
+            "parameter": {
+                "$in": [
+                    "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+                    "Achievements",
+                ]
+            },
+        }
     )
     answers = await answers_cursor.to_list(length=None)
 
     if not answers:
         raise HTTPException(status_code=404, detail="No required anchor answers found")
 
+    # Extract free-text values from answers
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -870,11 +880,17 @@ async def generate_anchor_options_from_answers_without_cv(
     random.shuffle(non_empty_texts)
     context_sample = "\n".join(non_empty_texts)
 
+    # Variation instructions
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
     style_noise_pool = [
-        "use uncommon synonyms", "reorder ideas differently", "make phrasing more concise",
-        "add creative wording twists", "slightly formal tone", "slightly casual tone",
-        "shuffle activity order", "split compound ideas differently"
+        "use uncommon synonyms",
+        "reorder ideas differently",
+        "make phrasing more concise",
+        "add creative wording twists",
+        "slightly formal tone",
+        "slightly casual tone",
+        "shuffle activity order",
+        "split compound ideas differently",
     ]
     random.shuffle(style_noise_pool)
     style_noise = ", ".join(style_noise_pool[:3])
@@ -918,8 +934,8 @@ async def generate_anchor_options_from_answers_without_cv(
             "Respond ONLY in JSON format:\n"
             "{\n"
             "  \"options\": [\n"
-            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
-            "\n  ]\n"
+            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels])
+            + "\n  ]\n"
             "}"
         )
 
@@ -936,27 +952,37 @@ async def generate_anchor_options_from_answers_without_cv(
                     opt = f"{labels[i]}. {opt}"
                 formatted.append(opt)
 
-            suggestions.append({
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": type_,
-                "iconfilename": iconfilename,
-                "options": formatted
-            })
+            suggestions.append(
+                {
+                    "parameter": parameter_list,
+                    "question": question_text,
+                    "type": type_,
+                    "iconfilename": iconfilename,
+                    "options": formatted,
+                }
+            )
 
         except Exception as e:
-            suggestions.append({
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": type_,
-                "iconfilename": iconfilename,
-                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
-                "error": str(e)
-            })
+            suggestions.append(
+                {
+                    "parameter": parameter_list,
+                    "question": question_text,
+                    "type": type_,
+                    "iconfilename": iconfilename,
+                    "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
+                    "error": str(e),
+                }
+            )
 
+    # Update the proceed_without_cv document with the generated options
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
-        {"$set": {"anchor_questions_with_options": suggestions}}
+        {"$set": {"anchor_questions_with_options": suggestions}},
     )
 
-    return {"success": True, "document_id": str(document_id), "suggestions": suggestions}
+    return {
+        "success": True,
+        "document_id": str(document_id),
+        "audienceType": audience_type,
+        "suggestions": suggestions,
+    }
