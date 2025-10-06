@@ -8,7 +8,6 @@ from app.services.cv_comparison import get_cv_summary
 import json
 
 
-
 async def get_missing_field_questions_service(section: str, db, current_user):
     uploads_collection = db["uploads"]
     questions_collection = db["questions"]
@@ -59,10 +58,12 @@ async def get_missing_field_questions_service(section: str, db, current_user):
 
     missing_fields = []
 
+    # Check for hard skills
     hard_skills = parsed_data.get("Skills", {}).get("HardSkills", [])
     if not hard_skills:
         missing_fields.append("Technical Skills")
 
+    # Check for other parameters
     for param in all_parameters:
         if param == "Technical Skills":
             continue
@@ -89,13 +90,15 @@ async def get_missing_field_questions_service(section: str, db, current_user):
                 missing_fields.append(param)
 
     suggestions_data = {}
-
     skill_doc = None
     llm_suggestions = None
 
-    if any(field in missing_fields for field in ["Technical Skills", "Soft Skills"]):
+    # Include certifications along with soft and hard skills
+    relevant_fields = {"Technical Skills", "Soft Skills", "Certifications"}
+    if any(field in missing_fields for field in relevant_fields):
         skill_doc = await skill_suggestions_collection.find_one({"cv_id": cv_id})
 
+        # Generate or fetch suggestions
         if "Technical Skills" in missing_fields:
             if skill_doc and skill_doc.get("technical_skills_suggestions"):
                 suggestions_data["Technical Skills"] = skill_doc["technical_skills_suggestions"]
@@ -110,6 +113,14 @@ async def get_missing_field_questions_service(section: str, db, current_user):
                 llm_suggestions = llm_suggestions or await generate_missing_field_suggestions(parsed_data)
                 suggestions_data["Soft Skills"] = llm_suggestions.get("softskills_suggestions", [])
 
+        if "Certifications" in missing_fields:
+            if skill_doc and skill_doc.get("certifications_suggestions"):
+                suggestions_data["Certifications"] = skill_doc["certifications_suggestions"]
+            else:
+                llm_suggestions = llm_suggestions or await generate_missing_field_suggestions(parsed_data)
+                suggestions_data["Certifications"] = llm_suggestions.get("certifications_suggestions", [])
+
+    # Build missing questions list
     missing_questions = []
     for q in questions_docs:
         param = q.get("parameter")
@@ -117,9 +128,10 @@ async def get_missing_field_questions_service(section: str, db, current_user):
             q_entry = {**q}
             if "_id" in q_entry:
                 q_entry["_id"] = str(q_entry["_id"])
-       
+
             if param in suggestions_data:
                 q_entry["options"] = suggestions_data[param]
+
             missing_questions.append(q_entry)
 
     return {
@@ -130,6 +142,7 @@ async def get_missing_field_questions_service(section: str, db, current_user):
         "missing_fields": missing_fields,
         "cv_id": cv_id,
     }
+
 
 
 async def get_audience_questions_service(db, current_user):
@@ -499,8 +512,9 @@ async def get_remaining_anchor_questions_without_cv(
                     {
                         "parameter": param_str,
                         "question": aq.get("question"),
+                        "type": aq.get("type"),
                         "options": aq.get("options", []),
-                        "iconfilename": aq.get("iconfilename"),  # ✅ added
+                        "iconfilename": aq.get("iconfilename"),  
                     }
                 )
                 seen_parameters.add(param_str)
@@ -520,8 +534,9 @@ async def get_remaining_anchor_questions_without_cv(
             {
                 "parameter": param_str,
                 "question": item.get("question"),
+                "type": aq.get("type"),
                 "options": item.get("options", []),
-                "iconfilename": item.get("iconfilename"),  # ✅ added
+                "iconfilename": item.get("iconfilename"),  
             }
         )
         seen_parameters.add(param_str)

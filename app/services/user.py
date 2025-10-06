@@ -44,6 +44,7 @@ async def forgot_password(db: AsyncIOMotorDatabase, email: str) -> Optional[str]
     )
     return temp_pass
 
+
 async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_data: dict, file_path: str) -> Dict[str, Any]:
     file_url = f"/uploads/{os.path.basename(file_path)}"
 

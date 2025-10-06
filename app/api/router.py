@@ -109,7 +109,6 @@ def forgot_password_route(payload: ForgotPasswordRequest, db=Depends(get_databas
 
     return {"temp_password": temp_password, "message": "Use this to log in and reset your password"}
 
-
 @router.post("/extract-cv")
 async def extract_cv(
     file: UploadFile = File(...),
@@ -133,24 +132,38 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    softskills_suggestions, technical_skills_suggestions = [], []
-    if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
+    # Initialize suggestions
+    softskills_suggestions, technical_skills_suggestions, certifications_suggestions = [], [], []
+
+    # Check if any suggestions are needed
+    if not data.get("Skills", {}).get("SoftSkills") or \
+       not data.get("Skills", {}).get("HardSkills") or \
+       not data.get("Certifications"):
+
         try:
             suggestions = await generate_missing_field_suggestions(data)
         except Exception:
-            suggestions = {"softskills_suggestions": [], "technical_skills_suggestions": []}
+            suggestions = {
+                "softskills_suggestions": [],
+                "technical_skills_suggestions": [],
+                "certifications_suggestions": []
+            }
 
         softskills_suggestions = suggestions.get("softskills_suggestions", [])
         technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
+        certifications_suggestions = suggestions.get("certifications_suggestions", [])
 
+    # Save all skill suggestions including certifications
     await save_skill_suggestions(
         user_id=current_user["id"],
         cv_id=cv_id_str,
         softskills=softskills_suggestions,
         technical_skills=technical_skills_suggestions,
+        certifications=certifications_suggestions,
         db=db
     )
 
+    # Process job-related questions
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
@@ -172,12 +185,12 @@ async def extract_cv(
             {"$set": {
                 "audienceType": audience_type,
                 "job_questions_with_options": job_questions_with_options
-                
             }}
         )
 
     summary = await get_cv_summary(data)
 
+    # Determine job role
     def parse_duration(duration_str: str):
         from dateutil import parser as date_parser
         try:
@@ -230,7 +243,6 @@ async def extract_cv(
         },
         "message": "CV data extracted and saved successfully"
     }
-
 
 @router.get("/missing_questions")
 async def get_missing_field_questions(
@@ -1084,7 +1096,7 @@ async def get_cv_summary_without(
     response_data = formatted_data.copy()
     response_data["Summary"] = response_data.pop("summary")
 
-    return {"success": True, "cv_summary_without_cv": response_data}
+    return {"success": True, "cv_details": response_data}
 
 #____________________________________________________________________________________________________________________________________________________
 

@@ -8,7 +8,7 @@
       "parameter": "Achievements",
       "value": {
         "selected": "Yes",
-        "details": "I developed a predictive analytics tool that improved sales forecasting accuracy by 25%, helping the business optimize inventory and reduce costs."
+        "text": "I developed a predictive analytics tool that improved sales forecasting accuracy by 25%, helping the business optimize inventory and reduce costs."
       }
     }
   ]

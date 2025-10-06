@@ -3,7 +3,7 @@
   "Cv Missing": [
     {
       "parameter": "Education",
-      "question": "Hey, can you tell me the highest level of education you’ve completed? Also, what did you study?",
+      "question": "Hey,What is the highest level of education you have completed, and what was your field of study?",
       "type": "Single-select + Dropdown",
       "iconfilename": "Suitcase",
       "options": [
@@ -115,13 +115,13 @@
     },
     {
       "parameter": "Experience",
-      "question": "Let’s talk about your work journey! Can you list 3–5 roles you've held – even internships or freelance gigs count!",
+      "question": "Let’s talk about your work journey! Can you share 3–5 roles you’ve held in your work journey, including internships or freelance work?",
       "type": "Short text",
       "iconfilename": "Office Desk"
     },
     {
       "parameter": "Technical Skills",
-      "question": "Got any tech tools or platforms you work with regularly? Feel free to name them – software, languages, anything!",
+      "question": "Hey, which tech tools, software, or languages do you work with regularly?",
       "type": "Multiple select + Add New",
       "iconfilename": "Assessment"
     },
@@ -135,37 +135,30 @@
       "parameter": "Certifications",
       "question": "Have you done any certifications, courses, or attended workshops recently?",
       "type": "Multiple select + add Tag",
-      "iconfilename": "Certificate",
-      "options": ["Google Data Analytics - Coursera",
-                  "Scrum Master – Scrum Alliance",
-                  "UI/UX Bootcamp – Springboard"]
+      "iconfilename": "Certificate"
     },
     {
       "parameter": "Salary Grades",
-      "question": "If you’re comfortable sharing, what’s your current or expected salary range? Totally okay to skip if you’d rather not say!",
+      "question": "If you’re comfortable sharing, what’s your current or expected salary range? ",
       "type": "Single Select",
       "iconfilename": "Salary",
       "options": [
-        "< ₹5L / <$10K",
-        "₹5L – ₹10L",
-        "₹10L – ₹20L",
-        "₹20L – ₹35L",
-        "₹35L+ / $70K+",
+        "4–6 LPA",
+        "7–10 LPA",
+        "11–15 LPA",
         "Prefer not to say"
       ]
     },
     {
       "parameter": "Projects",
-      "question": "Have you worked on any cool projects (college, work, or side projects) that you’d love to share? Big or small – all count!",
+      "question": "Have you worked on any cool projects—college, work, or just for fun—that you’d love to share?",
       "type": "Multiple select + add Tag",
-      "iconfilename": "Task Management",
-      "options": ["Built a to-do app in React",
-                  "Led a team to develop a chatbot",
-                  "Conducted a user research study for an NGO"]
+      "iconfilename": "Task Management"
+      
     },
     {
       "parameter": "Languages Known",
-      "question": "What languages can you speak, read, or write? Let me know your level — like fluent, basic, or somewhere in between.",
+      "question": "Which languages can you speak, read, or write?",
       "type": "Multiple select + Dropdown",
       "iconfilename": "Translation",
       "options": [
@@ -195,7 +188,7 @@
     },
     {
       "parameter": "Career Objective",
-      "question": "If you had to describe yourself in your current career — like what you do, what drives you, and what kind of work excites you — how would you put it in a few lines?",
+      "question": "If you had to describe yourself in your career—what you do, what drives you, and what kind of work really excites you—how would you sum it up in a few lines?",
       "type": "Short text",
       "iconfilename": "Career Path"
     }
@@ -627,7 +620,7 @@
         },
         {
           "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "question": "Outside your job, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
           "iconfilename": "Unity",
           "options": [
             "Volunteered for a social cause or NGO",
@@ -637,8 +630,7 @@
             "Raised awareness or funds for a cause",
             "Worked with people from diverse backgrounds",
             "Traveled for learning, not just fun",
-            "Engaged in online communities or activism",
-            "[Other] (Add your own)"
+            "Engaged in online communities or activism"
           ],
           "type": "Multiple select + Add New"
         },
@@ -650,7 +642,7 @@
         },
         {
           "parameter": "Interests - RIASEC",
-          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "question": "Which of these best matches your work or life preferences?",
           "iconfilename": "Abilities",
           "options": [
             "Realistic – I like hands-on work, tools, machines, or outdoors",
@@ -670,13 +662,13 @@
       "questions": [
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-          "question": "What kind of things light you up — things that pull you in without much effort?",
+          "question": "Which hobbies, personal interests, or activities naturally excite and motivate you?",
           "iconfilename": "Hobbies",
           "type": "Short text"
         },
         {
           "parameter": "Achievements",
-          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "question": "Can you share an achievement, big or small, that you’re proud of?",
           "iconfilename": "Trophy",
           "options": ["Yes", "No"],
           "type": "Yes/ No select + Text entry"
@@ -694,8 +686,7 @@
             "I stay focused even in messy or noisy settings",
             "I enjoy helping others stay motivated",
             "I need structure but can adapt when needed",
-            "I bounce back after mistakes or criticism",
-            "[Other] (Add your own)"
+            "I bounce back after mistakes or criticism"
           ],
           "type": "Multiple select + Add New"
         },
@@ -707,7 +698,7 @@
         },
         {
           "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "question": "Outside your job, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
           "iconfilename": "Unity",
           "options": [
             "Volunteered for a social cause or NGO",
@@ -717,8 +708,7 @@
             "Raised awareness or funds for a cause",
             "Worked with people from diverse backgrounds",
             "Traveled for learning, not just fun",
-            "Engaged in online communities or activism",
-            "[Other] (Add your own)"
+            "Engaged in online communities or activism"
           ],
           "type": "Multiple select + Add New"
         },
@@ -730,7 +720,7 @@
         },
         {
           "parameter": "Interests - RIASEC",
-          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "question": "Which of these best matches your work or life preferences?",
           "iconfilename": "Abilities",
           "options": [
             "Realistic – I like hands-on work, tools, machines, or outdoors",
@@ -740,7 +730,7 @@
             "Enterprising – I enjoy leading, influencing, or starting things",
             "Conventional – I prefer organizing, structuring, or working with systems and details"
           ],
-          "type": "Multiple + limit",
+          "type": "Multiple select + limit",
           "Limit": 3
         }
       ]

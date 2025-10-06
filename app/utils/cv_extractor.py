@@ -142,7 +142,8 @@ def extract_job_role(parsed_json):
 
 
 def extract_cv_data_from_file(filepath: str, mime_type: str):
-    prompt = """ 
+    
+    prompt = """
 You are an expert resume parser.
 
 Given a resume file, extract structured JSON with the following fields:
@@ -221,24 +222,36 @@ Given a resume file, extract structured JSON with the following fields:
 }
 
 Instructions:
-1. Extract data only if explicitly mentioned in the CV text.
-2. Do NOT infer, guess, or summarize missing values.
-3. For Skills and Tools: extract explicitly mentioned items and categorize into HardSkills, SoftSkills, Tools.
-4. For WorkExperience:
-   - If an Experience section exists, extract normally.
-   - If Duration is missing, scan Summary and Projects for Role and Years of Experience.
-   - If no Experience section exists, analyze Summary and Projects for any mention of experience (e.g., years, roles, domains) and use that to populate WorkExperience.
-   - If Summary explicitly mentions roles (e.g., "Project Manager", "Senior Developer"), include them in WorkExperience even if no company is listed.
-5. For YearsOfExperience:
-   - First, calculate based only on explicitly mentioned WorkExperience dates or durations.
-   - If none are found, extract directly from Summary using explicit mentions like:
-       - "X years of experience"
-       - "over X years"
-       - "more than X years"
-     (Example regex pattern: (?i)(over|more than|about)?\s*(\d+)\s*(\+)?\s*years? of experience)
-   - Use that number to populate YearsOfExperience.
-6. Return only valid JSON. Start with { and end with }.
+1. Extract data **only if explicitly mentioned** in the resume text.
+2. Do **NOT** infer, guess, or add any information not directly written in the document.
+
+3. **Skills Extraction Rules:**
+   - Only extract skills from sections explicitly labeled as:
+     “Skills”, “Technical Skills”, “Core Competencies”, “Key Skills”, “Tech Stack”, or “Technologies”.
+   - Categorize as follows:
+     - **Tools** → Include all items listed under “Technical Skills”, “Tech Stack”, or similar headings.
+       This includes programming languages, software, frameworks, platforms, and technologies.
+       Example: Python, Java, AWS, Excel, React, Git, Figma, etc.
+     - **HardSkills** → Only include non-tool, domain-specific, or professional capabilities explicitly listed under “Skills” or “Core Competencies”.
+       Example: Data Analysis, Project Management, Financial Modeling, etc.
+     - **SoftSkills** → Only include personal or interpersonal skills explicitly listed, such as Communication, Leadership, Problem Solving, etc.
+   - Do not extract or infer skills from experience descriptions, project details, or summaries.
+   - Record skills exactly as written (no normalization or assumption).
+   - If a skill category is not present, leave it empty.
+
+4. **WorkExperience, Education, Certifications, Projects, etc.:**
+   - Extract only explicit data.
+   - Skip any field not mentioned.
+
+5. **YearsOfExperience:**
+   - Extract only if the resume explicitly states a value (e.g., “5 years of experience”).
+   - Do not compute or infer from job dates.
+
+6. Return only **valid JSON**, starting with `{` and ending with `}`.
+7. Do not summarize, rephrase, or infer any data.
+8. If any section is missing, return an empty string or empty array for that section.
 """
+
     try:
         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             file_text = extract_docx_text(filepath)
@@ -339,16 +352,19 @@ def predict_audience_type(parsed_data: Dict) -> str:
     else:
         return "Early Professional (2-3 years of experience)"
 
-
 FIELD_MAPPING = {
     "softskills": "softskills_suggestions",
     "soft skills": "softskills_suggestions",
     "softskills_suggestions": "softskills_suggestions",
+
     "hardskills": "technical_skills_suggestions",
     "hard skills": "technical_skills_suggestions",
     "tools": "technical_skills_suggestions",
     "technicalskills": "technical_skills_suggestions",
-    "technical_skills": "technical_skills_suggestions"
+    "technical_skills": "technical_skills_suggestions",
+
+    "certifications": "certifications_suggestions",
+    "certification": "certifications_suggestions"
 }
 
 def normalize_key(key: str) -> str:
@@ -374,39 +390,49 @@ def clean_llm_json_response(response_text: str) -> str:
 async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     suggestions = {
         "softskills_suggestions": [],
-        "technical_skills_suggestions": []
+        "technical_skills_suggestions": [],
+        "certifications_suggestions": []
     }
 
+    skills = cv_context.get("Skills", {}) or {}
     missing_fields = []
-    generate_technical = False
 
-    if not cv_context.get("Skills", {}).get("SoftSkills"):
+    # Detect which fields are missing
+    if not skills.get("SoftSkills"):
         missing_fields.append("SoftSkills")
+    if not skills.get("HardSkills"):
+        missing_fields.append("HardSkills")
+    if not cv_context.get("Certifications"):
+        missing_fields.append("Certifications")
 
-    if not cv_context.get("Skills", {}).get("HardSkills") or not cv_context.get("Tools"):
-        missing_fields.extend(["HardSkills", "Tools"])
-        generate_technical = True
-
+    # ✅ Skip generation if everything is present
     if not missing_fields:
         return suggestions
 
+    # Build context string for model
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
     prompt = (
         "You are an AI helping complete missing CV fields.\n"
         f"CV Context:\n{context_str}\n\n"
         f"Missing Fields: {missing_fields}\n"
-        "Respond ONLY in JSON with keys matching the missing fields. "
-        "Each value must be a JSON array of strings."
+        "Respond ONLY in valid JSON with keys matching the missing fields. "
+        "Each value must be a JSON array of strings.\n"
+        "For 'Certifications', provide certifications in the professional format: "
+        "'Certification Name – Issuing Organization', like "
+        "'Google Data Analytics - Coursera', 'Scrum Master – Scrum Alliance', "
+        "or 'UI/UX Bootcamp – Springboard'."
     )
 
+    # Ask the model to generate
     response = await model.generate_content_async(prompt)
     cleaned = clean_llm_json_response(response.text)
 
     try:
         parsed = json.loads(cleaned)
-    except Exception as e:
+    except Exception:
         parsed = {f: [] for f in missing_fields}
 
+    # Map and assign generated data only for missing fields
     for key, value in parsed.items():
         norm_key = normalize_key(key)
         mapped_field = FIELD_MAPPING.get(norm_key)
@@ -421,34 +447,40 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         else:
             items = []
 
-        if mapped_field == "softskills_suggestions":
+        if mapped_field == "softskills_suggestions" and "SoftSkills" in missing_fields:
             suggestions["softskills_suggestions"].extend(items)
-        if mapped_field == "technical_skills_suggestions" and generate_technical:
+
+        if mapped_field == "technical_skills_suggestions" and "HardSkills" in missing_fields:
             suggestions["technical_skills_suggestions"].extend(items)
 
-    suggestions["softskills_suggestions"] = list(set(suggestions["softskills_suggestions"]))
-    suggestions["technical_skills_suggestions"] = list(set(suggestions["technical_skills_suggestions"]))
+        if mapped_field == "certifications_suggestions" and "Certifications" in missing_fields:
+            suggestions["certifications_suggestions"].extend(items)
+
+    # Deduplicate lists
+    for k in suggestions:
+        suggestions[k] = list(set(suggestions[k]))
 
     return suggestions
 
 
-
 async def generate_job_attribute_options(cv_context: dict, questions_from_db: list) -> dict:
     """
-    Generates multiple-choice options for each job attribute question.
-    Each parameter contributes exactly 5 options.
-    If the parameter string has multiple joined with '+', 
-    total options = 5 * number_of_parameters.
-    NOTE: limit is ignored for generation, but preserved in output.
-    Audience type is taken from cv_context (uploads collection).
+    Generates career-related multiple-choice options for each question.
+
+    Rules:
+    - If single parameter → 5 options.
+    - If multiple parameters joined with '+' → 2 options per parameter.
+    - Considers both parameters and question meaning to generate options.
+    - Outputs a single list of options.
+    - Each option starts with a capital letter.
     """
     results = []
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
 
-    # 🔹 Extract audience type from uploads collection (cv_context)
+    # 🔹 Extract audience type
     audience_type = cv_context.get("audience_type") or cv_context.get("audience")
 
-    # 🔹 Filter questions based on audience type
+    # 🔹 Filter by audience type
     if audience_type:
         questions_from_db = [
             q for q in questions_from_db
@@ -462,44 +494,53 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         iconfilename = q.get("iconfilename")
         limit = q.get("limit") or q.get("Limit")
 
-        parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = 5 * len(parameter_list)
-        labels = [chr(65 + i) for i in range(option_count)]
+        # Split parameters
+        parameter_list = [p.strip() for p in parameter.split(" + ")]
 
+        # Determine option count
+        option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
+
+        # 🔹 Build smart prompt
         prompt = (
-            "You are an AI assistant generating career-related multiple-choice options.\n\n"
+            "You are an AI assistant that generates short, relevant career-related multiple-choice options.\n\n"
+            "Each option should reflect the professional context implied by both the parameters and the question.\n"
+            "Use the information below:\n\n"
             f"CV Context:\n{context_str}\n\n"
-            f"Question: {question_text}\n\n"
-            "Respond ONLY in JSON format:\n"
+            f"Question:\n{question_text}\n\n"
+            f"Parameters: {', '.join(parameter_list)}\n\n"
+            "Respond ONLY in JSON format like this:\n"
             "{\n"
-            "  \"options\": [\n"
-            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
-            "\n  ]\n"
+            "  \"options\": [\"Option 1\", \"Option 2\", ...]\n"
             "}\n\n"
             "RULES:\n"
-            f"- Always provide EXACTLY {option_count} options.\n"
-            f"- Each option must begin with {', '.join(labels)}.\n"
-            "- Keep options SHORT (2–5 words, no full sentences).\n"
-            "- Options must be distinct and meaningful."
+            f"- Provide EXACTLY {option_count} options.\n"
+            "- Make options meaningful, realistic, and varied.\n"
+            "- Each option should be 2–5 words.\n"
+            "- Reflect both the question and parameters.\n"
+            "- Start each option with a capital letter.\n"
+            "- No numbers, bullets, or punctuation at the start."
         )
 
         try:
+            # 🔹 Call model
             response = await model.generate_content_async(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
-
             options = parsed.get("options", [])
+
+            # 🔹 Clean, capitalize, and validate
             formatted_options = []
-            for i in range(option_count):
-                if i < len(options):
-                    opt_text = options[i].strip()
+            for opt in options:
+                opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())  # remove weird prefixes
+                if opt:
+                    opt = opt[:1].upper() + opt[1:]  # ensure first letter capitalized
                 else:
-                    opt_text = f"Option {i+1}"
+                    opt = "Option"
+                formatted_options.append(opt)
 
-                if not opt_text.startswith(f"{labels[i]}."):
-                    opt_text = f"{labels[i]}. {opt_text}"
-
-                formatted_options.append(opt_text)
+            # Fill missing ones if model gives fewer
+            while len(formatted_options) < option_count:
+                formatted_options.append(f"Option {len(formatted_options)+1}")
 
             result_item = {
                 "parameter": parameter_list,
@@ -514,23 +555,23 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             results.append(result_item)
 
         except Exception:
+            # 🔹 Fallback
+            fallback = [f"Option {i+1}" for i in range(option_count)]
             result_item = {
                 "parameter": parameter_list,
                 "question": question_text,
                 "type": qtype,
                 "iconfilename": iconfilename,
-                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)]
+                "options": fallback
             }
             if limit is not None:
                 result_item["limit"] = limit
-
             results.append(result_item)
 
     return {
         "success": True,
         "suggestions": results
     }
-
 
 async def get_latest_user_cv(db, user_id: str):
     """
@@ -549,7 +590,8 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
     - Achievements (text field only)
 
-    Save them back into uploads collection under the latest CV document of the logged-in user.
+    Each parameter contributes EXACTLY 2 options (fixed count).
+    Saves results in the latest uploaded CV document for the user.
     """
 
     target_parameters = {
@@ -558,13 +600,13 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     }
 
     db = await get_database()
-
     latest_cv = await get_latest_user_cv(db, user_id)
     if not latest_cv or "parsed_data" not in latest_cv:
         raise HTTPException(status_code=404, detail="No CV found for this user")
 
     cv_id = str(latest_cv["_id"])
 
+    # Fetch required free-text anchor answers
     cursor = db["answers"].find({
         "cv_id": cv_id,
         "section": "Anchor Attributes",
@@ -580,6 +622,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     if not answers:
         raise HTTPException(status_code=404, detail="No required anchor answers found")
 
+    # Build free-text context map
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -589,8 +632,10 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         elif isinstance(val, dict) and "text" in val:
             base_free_text_map[param] = val["text"]
 
-    suggestions = []
-    variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
+    # Create context string and variation style
+    non_empty_texts = [t for t in base_free_text_map.values() if t]
+    random.shuffle(non_empty_texts)
+    context_sample = "\n".join(non_empty_texts)
 
     style_noise_pool = [
         "use uncommon synonyms",
@@ -604,10 +649,9 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     ]
     random.shuffle(style_noise_pool)
     style_noise = ", ".join(style_noise_pool[:3])
+    variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
 
-    non_empty_texts = [t for t in base_free_text_map.values() if t]
-    random.shuffle(non_empty_texts)
-    context_sample = "\n".join(non_empty_texts)
+    suggestions = []
 
     for q in questions:
         parameter = q.get("parameter")
@@ -618,9 +662,9 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         type_ = q.get("type")
         iconfilename = q.get("iconfilename")
 
+        # Split multiple parameters and calculate count
         parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = 5 * len(parameter_list)
-        labels = [chr(65 + i) for i in range(option_count)]
+        option_count = 2 * len(parameter_list)  # ✅ 2 options per parameter
 
         variation_instructions = (
             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
@@ -630,25 +674,25 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             f"- Apply these random variation rules: {style_noise}\n"
         )
 
+        # 🔹 Build prompt (consider both question & parameter)
         prompt = (
-            "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
+            "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
             f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
-            f"Target sub-parameters: {', '.join(parameter_list)}\n"
+            f"Target parameters: {', '.join(parameter_list)}\n"
             f"Question: {question_text}\n\n"
             "Instructions:\n"
-            f"- Generate EXACTLY {option_count} options.\n"
-            f"- Each option must begin with {', '.join(labels)}.\n"
-            "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers.\n"
-            "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
-            "- Keep each option SHORT (2–5 words).\n"
-            "- Ensure all options are distinct and meaningful.\n"
+            f"- Generate EXACTLY {option_count} short options.\n"
+            "- Each option must rephrase, split, or summarize the ideas from the free-text.\n"
+            "- DO NOT invent anything not in the context.\n"
+            "- Keep options SHORT (2–5 words).\n"
+            "- Start each option with a CAPITAL letter.\n"
+            "- Return plain text options only (no labels or numbers).\n"
+            "- All options must be distinct and meaningful.\n"
             f"{variation_instructions}"
-            f"- Variation key (for uniqueness): {variation_key}\n\n"
+            f"- Variation key: {variation_key}\n\n"
             "Respond ONLY in JSON format:\n"
             "{\n"
-            "  \"options\": [\n"
-            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
-            "\n  ]\n"
+            "  \"options\": [\"<Short phrase 1>\", \"<Short phrase 2>\", ...]\n"
             "}"
         )
 
@@ -658,12 +702,15 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
+            # Clean and capitalize each option
             formatted = []
-            for i in range(option_count):
-                opt = options[i].strip() if i < len(options) else f"Option {i+1}"
-                if not opt.startswith(f"{labels[i]}."):
-                    opt = f"{labels[i]}. {opt}"
-                formatted.append(opt)
+            for opt in options[:option_count]:
+                cleaned_opt = opt.strip().lstrip("0123456789.- ").capitalize()
+                formatted.append(cleaned_opt)
+
+            # If fewer options than expected, fill with placeholders
+            while len(formatted) < option_count:
+                formatted.append(f"Option {len(formatted)+1}")
 
             suggestions.append({
                 "parameter": parameter_list,
@@ -679,17 +726,17 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
                 "question": question_text,
                 "type": type_,
                 "iconfilename": iconfilename,
-                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
+                "options": [f"Option {i+1}" for i in range(option_count)],
                 "error": str(e)
             })
 
+    # 🔹 Save to uploads collection
     await db["uploads"].update_one(
         {"_id": latest_cv["_id"]},
         {"$set": {"anchor_questions_with_options": suggestions}}
     )
 
     return {"success": True, "suggestions": suggestions}
-
 
 #--------------Second Flow--------------
 
