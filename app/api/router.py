@@ -132,10 +132,8 @@ async def extract_cv(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    # Initialize suggestions
     softskills_suggestions, technical_skills_suggestions, certifications_suggestions = [], [], []
 
-    # Check if any suggestions are needed
     if not data.get("Skills", {}).get("SoftSkills") or \
        not data.get("Skills", {}).get("HardSkills") or \
        not data.get("Certifications"):
@@ -153,7 +151,6 @@ async def extract_cv(
         technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
         certifications_suggestions = suggestions.get("certifications_suggestions", [])
 
-    # Save all skill suggestions including certifications
     await save_skill_suggestions(
         user_id=current_user["id"],
         cv_id=cv_id_str,
@@ -163,7 +160,6 @@ async def extract_cv(
         db=db
     )
 
-    # Process job-related questions
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
     audience_type = predict_audience_type(data)
@@ -190,7 +186,6 @@ async def extract_cv(
 
     summary = await get_cv_summary(data)
 
-    # Determine job role
     def parse_duration(duration_str: str):
         from dateutil import parser as date_parser
         try:
@@ -233,16 +228,16 @@ async def extract_cv(
     known_percentage = round((known_fields / total_fields) * 100, 2) if total_fields else 0.0
 
     return {
-        "parsed_data": data,
-        "summary": summary,
-        "audienceType": audience_type,
-        "candidate": {
-            "name": data.get("Name"),
-            "job_role": job_role,
-            "known_percentage": known_percentage
-        },
-        "message": "CV data extracted and saved successfully"
-    }
+    "parsed_data": data,
+    "summary": summary,
+    "audienceType": audience_type,
+    "candidate": {
+        "name": data.get("Name"),
+        "job_role": job_role,
+        "known_percentage": known_percentage
+    },
+    "message": "CV data extracted and saved successfully"
+}
 
 @router.get("/missing_questions")
 async def get_missing_field_questions(
@@ -382,8 +377,6 @@ async def submit_anchor_attr_answers(
     )
 
 
-
-
 @router.get("/cv/latest/details")
 async def get_latest_cv_details(
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -453,7 +446,6 @@ async def get_latest_cv_details(
     else:
         latest_education = []
 
-    # 🔹 Certification transformer
     def transform_certifications(certs):
         formatted = []
         if not certs:
@@ -522,13 +514,12 @@ async def get_latest_cv_details(
     if not formatted_data["education"]:
         edu_answer = await fetch_answer("Education")
         if edu_answer:
-            # Handle case when education comes from questionnaire
             if isinstance(edu_answer, list):
                 formatted_data["education"] = []
                 for entry in edu_answer:
                     formatted_data["education"].append({
                         "Degree": entry.get("selectedField") or entry.get("selected") or "",
-                        "Institution": "",   # Not available in questionnaire
+                        "Institution": "", 
                         "Grade": "",
                         "Year": ""
                     })
@@ -828,7 +819,6 @@ def parse_duration(duration_str):
         duration_str = re.sub(r"\s+", " ", duration_str)
         duration_str = re.sub(r"\(|\)", "", duration_str)
 
-        # Handle "X years" / "X months"
         match = re.search(r"(\d+)\s*(year|month)", duration_str, re.IGNORECASE)
         if match:
             num, unit = match.groups()
@@ -836,7 +826,7 @@ def parse_duration(duration_str):
             end_date = datetime.today()
             if "year" in unit.lower():
                 start_date = datetime(end_date.year - num, end_date.month, end_date.day)
-            else:  # months
+            else: 
                 months_back = num
                 year = end_date.year - (months_back // 12)
                 month = end_date.month - (months_back % 12)
@@ -846,7 +836,6 @@ def parse_duration(duration_str):
                 start_date = datetime(year, month, 1)
             return start_date, end_date
 
-        # Handle "March 2022 - May 2023"
         parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str, flags=re.IGNORECASE)
         if len(parts) != 2:
             return None
@@ -878,15 +867,12 @@ def parse_experience_string(exp_string: str):
     roles = [r.strip() for r in re.split(r",(?![^()]*\))", exp_string)]
 
     for role_str in roles:
-        # Extract role (remove trailing "for ...", "with ...", "at ...")
         role = re.sub(r"\b(for|with|at)\b.*", "", role_str, flags=re.IGNORECASE).strip()
 
-        # Extract explicit date range
         date_match = re.search(r"([A-Za-z]+\s+\d{4})\s*(?:-|to)\s*([A-Za-z]+\s+\d{4})", role_str, re.IGNORECASE)
         if date_match:
             duration = f"{date_match.group(1)} - {date_match.group(2)}"
         else:
-            # Extract numeric duration like "6 months", "2 years"
             dur_match = re.search(r"(\d+)\s*(year|month)", role_str, re.IGNORECASE)
             duration = dur_match.group(0) if dur_match else ""
 
@@ -912,8 +898,6 @@ def calculate_years_of_experience(work_experiences):
         duration_str = job.get("Duration", "")
         if not duration_str:
             continue
-
-        # Handle "6 months", "2 years"
         match = re.search(r"(\d+)\s*(year|month)", duration_str, re.IGNORECASE)
         if match:
             num, unit = match.groups()
@@ -923,8 +907,6 @@ def calculate_years_of_experience(work_experiences):
             elif "month" in unit.lower():
                 total_months += num
             continue
-
-        # Handle "March 2022 - May 2023"
         parsed = parse_duration(duration_str)
         if parsed:
             start, end = parsed
@@ -958,8 +940,6 @@ async def get_cv_summary_without(
         raise HTTPException(status_code=404, detail="No proceed_without_cv found")
 
     document_id = str(latest_proceed["_id"])
-
-    # DB query uses Career Objective, map it to "summary" internally
     parameters_map = {
         "Technical Skills": "hard_skills",
         "Career Objective": "summary",
@@ -973,7 +953,7 @@ async def get_cv_summary_without(
         "role": None,
         "career_overview": 0.0,
         "hard_skills": [],
-        "summary": "",   # internal key
+        "summary": "",   
         "soft_skills": [],
         "education": [],
         "certifications": [],
@@ -1092,7 +1072,6 @@ async def get_cv_summary_without(
         tools_value = hot_tech_doc.get("value", [])
         formatted_data["tools"] = tools_value
 
-    # Rename "summary" -> "Summary" for response
     response_data = formatted_data.copy()
     response_data["Summary"] = response_data.pop("summary")
 

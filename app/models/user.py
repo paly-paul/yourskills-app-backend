@@ -77,7 +77,7 @@ class SkillSuggestionModel(BaseModel):
     cv_id: str
     softskills_suggestions: List[str] = Field(default_factory=list)
     technical_skills_suggestions: List[str] = Field(default_factory=list)
-    certifications_suggestions: List[str] = Field(default_factory=list)  # <-- added
+    certifications_suggestions: List[str] = Field(default_factory=list)  
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class AnswerModel(BaseModel):

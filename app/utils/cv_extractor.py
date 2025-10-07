@@ -364,7 +364,10 @@ FIELD_MAPPING = {
     "technical_skills": "technical_skills_suggestions",
 
     "certifications": "certifications_suggestions",
-    "certification": "certifications_suggestions"
+    "certification": "certifications_suggestions",
+    "certificate": "certifications_suggestions",
+    "certificates": "certifications_suggestions",
+    "certification_suggestions": "certifications_suggestions"
 }
 
 def normalize_key(key: str) -> str:
@@ -396,8 +399,6 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
 
     skills = cv_context.get("Skills", {}) or {}
     missing_fields = []
-
-    # Detect which fields are missing
     if not skills.get("SoftSkills"):
         missing_fields.append("SoftSkills")
     if not skills.get("HardSkills"):
@@ -405,25 +406,23 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
     if not cv_context.get("Certifications"):
         missing_fields.append("Certifications")
 
-    # ✅ Skip generation if everything is present
     if not missing_fields:
         return suggestions
 
-    # Build context string for model
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
     prompt = (
-        "You are an AI helping complete missing CV fields.\n"
+        "You are an AI assistant specialized in analyzing CV/resume data to suggest missing or weak content. "
+        "Analyze the provided CV Context and identify relevant professional suggestions for ALL fields listed in 'Missing Fields'.\n\n"
         f"CV Context:\n{context_str}\n\n"
-        f"Missing Fields: {missing_fields}\n"
-        "Respond ONLY in valid JSON with keys matching the missing fields. "
-        "Each value must be a JSON array of strings.\n"
-        "For 'Certifications', provide certifications in the professional format: "
-        "'Certification Name – Issuing Organization', like "
-        "'Google Data Analytics - Coursera', 'Scrum Master – Scrum Alliance', "
-        "or 'UI/UX Bootcamp – Springboard'."
+        f"Missing Fields: {missing_fields}\n\n"
+        "**CRITICAL RESPONSE FORMAT INSTRUCTIONS**\n"
+        "1. **Respond ONLY in valid JSON.**\n"
+        "2. **You MUST include a key for every field listed in 'Missing Fields'.** Use the exact key names (e.g., 'SoftSkills', 'Certifications').\n"
+        "3. **Each value MUST be a JSON array of strings.**\n"
+        "4. **Format Reference for Certifications:** For 'Certifications', format each suggestion as a single string: 'Certification Name – Issuing Organization'. Example: 'PMP – PMI', 'AWS Certified Developer – Amazon', or 'CSIR-UGC NET JRF - NTA'.\n"
+        "5. **Format Reference for Skills:** For 'SoftSkills' and 'HardSkills', provide single-word or short-phrase skills. Example: 'Python', 'Leadership', 'Data Analysis'."
     )
 
-    # Ask the model to generate
     response = await model.generate_content_async(prompt)
     cleaned = clean_llm_json_response(response.text)
 
@@ -431,8 +430,6 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         parsed = json.loads(cleaned)
     except Exception:
         parsed = {f: [] for f in missing_fields}
-
-    # Map and assign generated data only for missing fields
     for key, value in parsed.items():
         norm_key = normalize_key(key)
         mapped_field = FIELD_MAPPING.get(norm_key)
@@ -456,9 +453,9 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         if mapped_field == "certifications_suggestions" and "Certifications" in missing_fields:
             suggestions["certifications_suggestions"].extend(items)
 
-    # Deduplicate lists
     for k in suggestions:
         suggestions[k] = list(set(suggestions[k]))
+
 
     return suggestions
 
@@ -477,10 +474,8 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
     results = []
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
 
-    # 🔹 Extract audience type
     audience_type = cv_context.get("audience_type") or cv_context.get("audience")
 
-    # 🔹 Filter by audience type
     if audience_type:
         questions_from_db = [
             q for q in questions_from_db
@@ -494,13 +489,10 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         iconfilename = q.get("iconfilename")
         limit = q.get("limit") or q.get("Limit")
 
-        # Split parameters
         parameter_list = [p.strip() for p in parameter.split(" + ")]
 
-        # Determine option count
         option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
 
-        # 🔹 Build smart prompt
         prompt = (
             "You are an AI assistant that generates short, relevant career-related multiple-choice options.\n\n"
             "Each option should reflect the professional context implied by both the parameters and the question.\n"
@@ -522,23 +514,20 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         )
 
         try:
-            # 🔹 Call model
             response = await model.generate_content_async(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
-            # 🔹 Clean, capitalize, and validate
             formatted_options = []
             for opt in options:
-                opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())  # remove weird prefixes
+                opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())  
                 if opt:
-                    opt = opt[:1].upper() + opt[1:]  # ensure first letter capitalized
+                    opt = opt[:1].upper() + opt[1:]  
                 else:
                     opt = "Option"
                 formatted_options.append(opt)
 
-            # Fill missing ones if model gives fewer
             while len(formatted_options) < option_count:
                 formatted_options.append(f"Option {len(formatted_options)+1}")
 
@@ -555,7 +544,6 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             results.append(result_item)
 
         except Exception:
-            # 🔹 Fallback
             fallback = [f"Option {i+1}" for i in range(option_count)]
             result_item = {
                 "parameter": parameter_list,
@@ -606,7 +594,6 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
 
     cv_id = str(latest_cv["_id"])
 
-    # Fetch required free-text anchor answers
     cursor = db["answers"].find({
         "cv_id": cv_id,
         "section": "Anchor Attributes",
@@ -622,7 +609,6 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     if not answers:
         raise HTTPException(status_code=404, detail="No required anchor answers found")
 
-    # Build free-text context map
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -632,7 +618,6 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         elif isinstance(val, dict) and "text" in val:
             base_free_text_map[param] = val["text"]
 
-    # Create context string and variation style
     non_empty_texts = [t for t in base_free_text_map.values() if t]
     random.shuffle(non_empty_texts)
     context_sample = "\n".join(non_empty_texts)
@@ -662,9 +647,8 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         type_ = q.get("type")
         iconfilename = q.get("iconfilename")
 
-        # Split multiple parameters and calculate count
         parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = 2 * len(parameter_list)  # ✅ 2 options per parameter
+        option_count = 2 * len(parameter_list)  
 
         variation_instructions = (
             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
@@ -674,7 +658,6 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             f"- Apply these random variation rules: {style_noise}\n"
         )
 
-        # 🔹 Build prompt (consider both question & parameter)
         prompt = (
             "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
             f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
@@ -702,13 +685,11 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
-            # Clean and capitalize each option
             formatted = []
             for opt in options[:option_count]:
                 cleaned_opt = opt.strip().lstrip("0123456789.- ").capitalize()
                 formatted.append(cleaned_opt)
 
-            # If fewer options than expected, fill with placeholders
             while len(formatted) < option_count:
                 formatted.append(f"Option {len(formatted)+1}")
 
@@ -730,7 +711,6 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
                 "error": str(e)
             })
 
-    # 🔹 Save to uploads collection
     await db["uploads"].update_one(
         {"_id": latest_cv["_id"]},
         {"$set": {"anchor_questions_with_options": suggestions}}
@@ -739,7 +719,6 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     return {"success": True, "suggestions": suggestions}
 
 #--------------Second Flow--------------
-
 
 
 async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
@@ -752,6 +731,7 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
     answers_collection = db["answers_without_cv"]
     questions_collection = db["questions"]
 
+    # Get latest proceed_without_cv doc
     latest_doc = await proceed_collection.find_one(
         {"user_id": user_id},
         sort=[("created_at", -1)]
@@ -762,6 +742,7 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
     latest_document_id = str(latest_doc["_id"])
     audience_type = latest_doc.get("audienceType")
 
+    # Get missing answers
     missing_answers_cursor = answers_collection.find(
         {"user_id": user_id, "document_id": latest_document_id, "section": "Cv Missing"}
     )
@@ -770,94 +751,103 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
     if not missing_answers:
         raise HTTPException(status_code=404, detail="No missing answers found")
 
+    # Build context string
     context_str = "\n".join(
         f"{a['parameter']}: {a.get('value')}" for a in missing_answers if a.get("value")
     )
 
+    # Fetch job attributes questions
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions document found")
 
     job_attributes = questions_doc.get("Job attributes", [])
-
-    questions_for_user = []
-    for qa in job_attributes:
-        if qa.get("audienceType") == audience_type:
-            questions_for_user = qa.get("questions", [])
-            break
+    questions_for_user = [
+        qa for qa in job_attributes if qa.get("audienceType") == audience_type
+    ]
 
     if not questions_for_user:
-        raise HTTPException(status_code=404, detail=f"No questions found for audienceType {audience_type}")
+        raise HTTPException(
+            status_code=404, detail=f"No questions found for audienceType {audience_type}"
+        )
 
     results = []
 
-    for q in questions_for_user:
-        parameter = q.get("parameter", "")
-        question_text = q.get("question")
-        qtype = q.get("type")
-        iconfilename = q.get("iconfilename")
-        limit = q.get("limit") or q.get("Limit")
+    for qa_group in questions_for_user:
+        for q in qa_group.get("questions", []):
+            parameter = q.get("parameter", "")
+            question_text = q.get("question")
+            qtype = q.get("type")
+            iconfilename = q.get("iconfilename")
+            limit = q.get("limit") or q.get("Limit")
 
-        parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = 5 * len(parameter_list)
-        labels = [chr(65 + i) for i in range(option_count)]
+            parameter_list = [p.strip() for p in parameter.split("+")]
 
-        prompt = (
-            "You are an AI assistant generating career-related multiple-choice options.\n\n"
-            f"Audience Type: {audience_type}\n\n"
-            f"Missing CV Context:\n{context_str}\n\n"
-            f"Question: {question_text}\n\n"
-            "Respond ONLY in JSON format:\n"
-            "{\n"
-            "  \"options\": [\n"
-            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels]) +
-            "\n  ]\n"
-            "}\n\n"
-            "RULES:\n"
-            f"- Always provide EXACTLY {option_count} options.\n"
-            f"- Each option must begin with {', '.join(labels)}.\n"
-            "- Keep options SHORT (2–5 words).\n"
-            "- Options must be distinct and meaningful."
-        )
+            # Option count logic
+            if len(parameter_list) == 1:
+                option_count = 5
+            else:
+                option_count = 2 * len(parameter_list)
 
-        try:
-            response = await model.generate_content_async(prompt)
-            cleaned = clean_llm_json_response(response.text)
-            parsed = json.loads(cleaned)
+            # Build prompt (no A,B,C labels)
+            prompt = (
+                "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
+                f"Audience Type: {audience_type}\n\n"
+                f"Missing CV Context:\n{context_str}\n\n"
+                f"Question: {question_text}\n\n"
+                "Respond ONLY in JSON format:\n"
+                "{\n"
+                "  \"options\": [\n"
+                "    \"<short phrase>\",\n"
+                "    \"<short phrase>\"\n"
+                "  ]\n"
+                "}\n\n"
+                "RULES:\n"
+                f"- Provide EXACTLY {option_count} concise, distinct options.\n"
+                "- Keep each option 2–5 words long.\n"
+                "- Avoid numbering or letters (no A/B/C/... prefixes).\n"
+                "- Make sure they fit the question meaningfully."
+            )
 
-            options = parsed.get("options", [])
-            formatted_options = []
-            for i in range(option_count):
-                opt_text = options[i].strip() if i < len(options) else f"Option {i+1}"
-                if not opt_text.startswith(f"{labels[i]}."):
-                    opt_text = f"{labels[i]}. {opt_text}"
-                formatted_options.append(opt_text)
+            try:
+                response = await model.generate_content_async(prompt)
+                cleaned = clean_llm_json_response(response.text)
+                parsed = json.loads(cleaned)
 
-            result_item = {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": qtype,
-                "iconfilename": iconfilename,
-                "options": formatted_options,
-            }
-            if limit is not None:
-                result_item["limit"] = limit
+                options = parsed.get("options", [])
+                # Ensure correct count and clean formatting
+                formatted_options = [
+                    opt.strip() for opt in options[:option_count]
+                ]
+                while len(formatted_options) < option_count:
+                    formatted_options.append(f"Option {len(formatted_options)+1}")
 
-            results.append(result_item)
+                result_item = {
+                    "parameter": parameter_list,
+                    "question": question_text,
+                    "type": qtype,
+                    "iconfilename": iconfilename,
+                    "options": formatted_options,
+                }
+                if limit is not None:
+                    result_item["limit"] = limit
 
-        except Exception:
-            result_item = {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": qtype,
-                "iconfilename": iconfilename,
-                "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
-            }
-            if limit is not None:
-                result_item["limit"] = limit
+                results.append(result_item)
 
-            results.append(result_item)
+            except Exception as e:
+                print(f"⚠️ Fallback due to error: {e}")
+                result_item = {
+                    "parameter": parameter_list,
+                    "question": question_text,
+                    "type": qtype,
+                    "iconfilename": iconfilename,
+                    "options": [f"Option {i+1}" for i in range(option_count)],
+                }
+                if limit is not None:
+                    result_item["limit"] = limit
+                results.append(result_item)
 
+    # Save results
     await proceed_collection.update_one(
         {"_id": latest_doc["_id"]},
         {"$set": {"job_questions_with_options": results, "updated_at": datetime.utcnow()}}
@@ -867,8 +857,9 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
         "success": True,
         "latest_document_id": latest_document_id,
         "audience_type": audience_type,
-        "suggestions": results
+        "suggestions": results,
     }
+
 
 async def generate_anchor_options_from_answers_without_cv(
     user_id: str, questions, model, get_database
@@ -880,14 +871,15 @@ async def generate_anchor_options_from_answers_without_cv(
     Fetch answers from answers_without_cv based on the latest proceed_without_cv.document_id,
     generate options using LLM, and save them back into proceed_without_cv.
     """
+
+    OPTIONS_PER_PARAMETER = 2
+
     target_parameters = {
         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-        "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+        "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
     }
 
     db = get_database()
-
-    # Fetch the latest proceed_without_cv document for the user
     latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
@@ -899,7 +891,6 @@ async def generate_anchor_options_from_answers_without_cv(
     document_id = document["_id"]
     audience_type = document.get("audienceType", "General")
 
-    # Fetch answers linked to this document_id
     answers_cursor = db["answers_without_cv"].find(
         {
             "user_id": user_id,
@@ -917,7 +908,6 @@ async def generate_anchor_options_from_answers_without_cv(
     if not answers:
         raise HTTPException(status_code=404, detail="No required anchor answers found")
 
-    # Extract free-text values from answers
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -931,7 +921,6 @@ async def generate_anchor_options_from_answers_without_cv(
     random.shuffle(non_empty_texts)
     context_sample = "\n".join(non_empty_texts)
 
-    # Variation instructions
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
     style_noise_pool = [
         "use uncommon synonyms",
@@ -958,8 +947,7 @@ async def generate_anchor_options_from_answers_without_cv(
         iconfilename = q.get("iconfilename")
 
         parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = 5 * len(parameter_list)
-        labels = [chr(65 + i) for i in range(option_count)]
+        option_count = OPTIONS_PER_PARAMETER * len(parameter_list)
 
         variation_instructions = (
             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
@@ -975,8 +963,7 @@ async def generate_anchor_options_from_answers_without_cv(
             f"Target sub-parameters: {', '.join(parameter_list)}\n"
             f"Question: {question_text}\n\n"
             "Instructions:\n"
-            f"- Generate EXACTLY {option_count} options.\n"
-            f"- Each option must begin with {', '.join(labels)}.\n"
+            f"- Generate EXACTLY {option_count} short options.\n"
             "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers.\n"
             "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
             "- Keep each option SHORT (2–5 words).\n"
@@ -985,7 +972,7 @@ async def generate_anchor_options_from_answers_without_cv(
             "Respond ONLY in JSON format:\n"
             "{\n"
             "  \"options\": [\n"
-            + ",\n".join([f"    \"{lbl}. <short phrase>\"" for lbl in labels])
+            + ",\n".join([f"    \"<short phrase>\"" for _ in range(option_count)])
             + "\n  ]\n"
             "}"
         )
@@ -999,8 +986,6 @@ async def generate_anchor_options_from_answers_without_cv(
             formatted = []
             for i in range(option_count):
                 opt = options[i].strip() if i < len(options) else f"Option {i+1}"
-                if not opt.startswith(f"{labels[i]}."):
-                    opt = f"{labels[i]}. {opt}"
                 formatted.append(opt)
 
             suggestions.append(
@@ -1020,12 +1005,10 @@ async def generate_anchor_options_from_answers_without_cv(
                     "question": question_text,
                     "type": type_,
                     "iconfilename": iconfilename,
-                    "options": [f"{labels[i]}. Option {i+1}" for i in range(option_count)],
+                    "options": [f"Option {i+1}" for i in range(option_count)],
                     "error": str(e),
                 }
             )
-
-    # Update the proceed_without_cv document with the generated options
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
         {"$set": {"anchor_questions_with_options": suggestions}},

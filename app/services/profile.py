@@ -338,6 +338,8 @@ async def get_questions_excluding_parameters(
         "cv_id": cv_id,
         "questions": merged_questions
     }
+
+
 #___________________________________________________________________________________________________________________________________________________
 #____________________________________________________________________________________________________________________________________________________
 #----------------------------------------------------------Second Flow-----------------------------------------------------------------------------
@@ -376,7 +378,7 @@ async def get_questions_by_parameters_withoutcv(
     current_user,
     attribute_type: str,
     parameters: list,
-    audience_type: str = None  # optionally pass audienceType directly
+    audience_type: str = None  
 ):
     """
     Fetch specific questions from anchor attributes based on parameters & audience type.
@@ -386,7 +388,7 @@ async def get_questions_by_parameters_withoutcv(
     questions_collection = db["questions"]
     proceed_collection = db["proceed_without_cv"]
 
-    # Fetch latest proceed_without_cv record if audience_type not passed
+    
     if not audience_type:
         latest_record = await proceed_collection.find_one(
             {"user_id": str(current_user["_id"])},
@@ -397,14 +399,12 @@ async def get_questions_by_parameters_withoutcv(
         audience_type = latest_record["audienceType"]
         doc_id = str(latest_record["_id"])
     else:
-        # If audience_type is provided, fetch the latest doc_id for reference
         latest_record = await proceed_collection.find_one(
             {"user_id": str(current_user["_id"])},
             sort=[("_id", -1)]
         )
         doc_id = str(latest_record["_id"]) if latest_record else None
 
-    # Fetch questions collection
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
         raise HTTPException(status_code=404, detail="No questions collection found")
@@ -420,7 +420,6 @@ async def get_questions_by_parameters_withoutcv(
             detail=f"No {attribute_type.lower()} questions found for audience type: {audience_type}"
         )
 
-    # Filter questions by parameters
     results = []
     for cq in matching_entry.get("questions", []):
         param = normalize_parameter(cq.get("parameter"))
@@ -448,6 +447,7 @@ async def get_remaining_anchor_questions_without_cv(
     """
     Fetch remaining anchor questions for user using latest proceed_without_cv,
     merged with system questions, excluding duplicates.
+    Include `limit` in the response if present in questions.
     """
     user_id = str(current_user["_id"])
     if exclude_params is None:
@@ -458,7 +458,6 @@ async def get_remaining_anchor_questions_without_cv(
     if attribute_type is None:
         attribute_type = "Anchor attributes"
 
-    # Fetch the latest proceed_without_cv document
     latest_proceed_list = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
@@ -469,7 +468,6 @@ async def get_remaining_anchor_questions_without_cv(
 
     audience_type = latest_proceed.get("audienceType", "General")
 
-    # Fetch system questions based on audienceType
     questions_doc = await db["questions"].find_one({}) or {}
     system_questions = []
     for item in questions_doc.get(attribute_type, []):
@@ -480,7 +478,6 @@ async def get_remaining_anchor_questions_without_cv(
             if param:
                 system_questions.append(q)
 
-    # Only generate options if they don’t exist yet
     if "anchor_questions_with_options" in latest_proceed:
         suggestions = latest_proceed["anchor_questions_with_options"]
     else:
@@ -496,49 +493,61 @@ async def get_remaining_anchor_questions_without_cv(
         latest_proceed = latest_proceed_list[0]
         suggestions = latest_proceed.get("anchor_questions_with_options", [])
 
-    # Collect user questions excluding the ones in exclude_params
     user_questions = []
     seen_parameters = set()
     for aq in suggestions:
         param = aq.get("parameter")
-        if param:
-            # Normalize to string
-            if isinstance(param, list):
-                param_str = " + ".join(param)
-            else:
-                param_str = param
-            if param_str not in exclude_params and param_str not in seen_parameters:
-                user_questions.append(
-                    {
-                        "parameter": param_str,
-                        "question": aq.get("question"),
-                        "type": aq.get("type"),
-                        "options": aq.get("options", []),
-                        "iconfilename": aq.get("iconfilename"),  
-                    }
-                )
-                seen_parameters.add(param_str)
+        if not param:
+            continue
 
-    # Merge with system questions not in exclude_params or already seen
-    for item in system_questions:
-        param = item.get("parameter")
+        if isinstance(param, list):
+            param_str = " + ".join(param)
+        else:
+            param_str = param
+
+        if param_str not in exclude_params and param_str not in seen_parameters:
+            uq_obj = {
+                "parameter": param_str,
+                "question": aq.get("question"),
+                "type": aq.get("type"),
+                "options": aq.get("options", []),
+                "iconfilename": aq.get("iconfilename"),
+            }
+
+            if "limit" in aq or "Limit" in aq:
+                uq_obj["limit"] = aq.get("limit") or aq.get("Limit")
+
+            user_questions.append(uq_obj)
+            seen_parameters.add(param_str)
+
+    for sq in system_questions:
+        param = sq.get("parameter")
         if not param:
             continue
         if isinstance(param, list):
             param_str = " + ".join(param)
         else:
             param_str = param
+
         if param_str in exclude_params or param_str in seen_parameters:
             continue
-        user_questions.append(
-            {
-                "parameter": param_str,
-                "question": item.get("question"),
-                "type": aq.get("type"),
-                "options": item.get("options", []),
-                "iconfilename": item.get("iconfilename"),  
-            }
-        )
+
+        sq_obj = {
+            "parameter": param_str,
+            "question": sq.get("question"),
+            "type": sq.get("type"),
+            "options": sq.get("options", []),
+            "iconfilename": sq.get("iconfilename"),
+        }
+
+        if "limit" in sq or "Limit" in sq:
+            sq_obj["limit"] = sq.get("limit") or sq.get("Limit")
+
+        user_questions.append(sq_obj)
         seen_parameters.add(param_str)
 
-    return {"success": True, "audienceType": audience_type, "questions": user_questions}
+    return {
+        "success": True,
+        "audienceType": audience_type,
+        "questions": user_questions
+    }

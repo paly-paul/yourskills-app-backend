@@ -39,17 +39,17 @@
       "parameter": "Certifications",
       "answer_type": "Multiple select + Add Tag",
       "value": [
-        "AWS Certified Solutions Architect",
-        "PMP",
-        "Google Data Analytics",
-        "Salesforce Administrator",
-        "Scrum Master"
+       "Certified Associate in Android Development - Google",
+        "Certified Machine Learning Specialist - Coursera",
+        "Advanced Android App Development - Udacity",
+        "SQL Masterclass - Udemy",
+        "Full Stack Web Developer Certification - edX"
       ]
     },
     {
       "parameter": "Salary Grades",
       "answer_type": "Single Select",
-      "value": "₹35L+ / $70K+"
+      "value": "Prefer not to say"
     },
     {
       "parameter": "Projects",
