@@ -723,7 +723,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
 
 async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
     """
-    Generates multiple-choice options for missing CV attributes
+    Generates multiple-choice options for  Job attributes
     and saves them to the proceed_without_cv collection.
     """
 
