@@ -200,13 +200,13 @@
     "questions": [
       {
         "parameter": "Core Tasks + Supplementary Tasks",
-        "question": "What kind of stuff do you usually end up doing at work — even the things that weren’t officially part of your job?",
+        "question": "Can you walk me through the real tasks you handle at work, including anything extra that comes up?",
         "iconfilename": "Checklist",
         "type": "Multiple select + Add New"
       },
       {
         "parameter": "Emerging Tasks",
-        "question": "Lately, have you picked up any new tasks or started doing things that weren’t part of your original role?",
+        "question": "Recently have you started doing any new emerging tasks that weren’t really in your job description?”",
         "iconfilename": "Checklist",
         "type": "Multiple select + Add New"
       },
@@ -230,7 +230,7 @@
       },
       {
         "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "What kind of work setup or vibe helps you do your best?",
+        "question": "What kind of work environment or setup helps you perform at your best?",
         "iconfilename": "Communication skills",
         "type": "Multiple select + limit",
         "Limit": 5
@@ -244,7 +244,7 @@
       },
       {
         "parameter": "Career Interests",
-        "question": "If you could explore or grow into a new area at work, what kind of stuff would you be excited to try?",
+        "question": "What new areas, roles or projects at work would excite you the most to explore?",
         "iconfilename": "Communication skills",
         "type": "Multiple select + Add New"
       }
@@ -255,13 +255,13 @@
     "questions": [
       {
         "parameter": "Core Tasks + Supplementary Tasks",
-        "question": "What kind of tasks do you naturally enjoy or end up doing, even if it's not assigned?",
+        "question": "What kinds of tasks do you naturally enjoy or find yourself doing, even if they’re not officially assigned?",
         "iconfilename": "Checklist",
         "type": "Multiple select + Add New"
       },
       {
         "parameter": "Emerging Tasks",
-        "question": "Have you taken on any new things recently that weren’t part of your course or role?",
+        "question": "Have you taken on any new tasks recently that weren’t part of your course?",
         "iconfilename": "Checklist",
         "type": "Multiple select + Add New"
       },
@@ -279,13 +279,13 @@
       },
       {
         "parameter": "Functional Skills",
-        "question": "Which of these things do you feel you’re naturally good at?",
+        "question": "What do you feel you’re naturally good at?",
         "iconfilename": "Soft Skills",
         "type": "Multiple select + Add New"
       },
       {
         "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "What kind of work vibe suits you best?",
+        "question": "Which type of work environment do you feel fits you best?",
         "iconfilename": "Communication skills",
         "type": "Multiple select + limit",
         "Limit": 5
@@ -299,7 +299,7 @@
      },
       {
         "parameter": "Career Interests",
-        "question": "Which roles or fields have caught your attention recently – even just out of curiosity?",
+        "question": "Which new areas, roles or projects are you most interested in exploring these days?",
         "iconfilename": "Communication skills",
         "type": "Multiple select + Add New"
       }
@@ -310,13 +310,13 @@
     "questions": [
       {
         "parameter": "Core Tasks + Supplementary Tasks",
-        "question": "What do you usually spend your work time doing — your regular and side responsibilities?",
+        "question": "What are your primary responsibilities and the additional tasks you handle in a typical workday?",
         "iconfilename": "Checklist",
         "type": "Multiple select + Add New"
       },
       {
         "parameter": "Emerging Tasks",
-        "question": "Have you picked up any new or unexpected responsibilities lately?",
+        "question": "Have you taken on any new emerging tasks at work recently?",
         "iconfilename": "Checklist",
         "type": "Multiple select + Add New"
       },
@@ -340,7 +340,7 @@
       },
       {
         "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "What kind of work style or setup helps you do your best work?",
+        "question": "What kind of work environment or setup helps you perform at your best?",
         "iconfilename": "Communication skills",
         "type": "Multiple select + limit",
         "Limit": 5
@@ -365,7 +365,7 @@
     "questions": [
       {
         "parameter": "Core Tasks + Supplementary Tasks",
-        "question": "What kind of stuff do you mostly do (or used to do) at work?",
+        "question": "What types of primary or additional tasks and responsibilities are you looking to focus on in your next role?",
         "iconfilename": "Checklist",
         "type": "Multiple select + Add New"
       },
@@ -383,7 +383,7 @@
       },
       {
         "parameter": "Knowledge + Skills",
-        "question": "What areas do you feel strong in – the stuff you’ve got a good grip on?",
+        "question": "Which skills or areas of knowledge do you rely on most in your work?",
         "iconfilename": "Soft Skills",
         "type": "Multiple select"
       },
@@ -395,7 +395,7 @@
       },
       {
         "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "What kind of work style or day-to-day vibe suits you best?",
+        "question": "What kind of work environment or setup helps you perform at your best?",
         "iconfilename": "Communication skills",
         "type": "Multiple select + limit",
         "Limit": 5
@@ -423,13 +423,13 @@
       "questions": [
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-          "question": "What kind of things light you up — things that pull you in without much effort?",
+          "question": "Which hobbies, personal interests, or activities naturally excite and motivate you?",
           "iconfilename": "Hobbies",
           "type": "Short text"
         },
         {
           "parameter": "Achievements",
-          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "question": "Can you share an achievement, big or small, that you’re proud of ?",
           "iconfilename": "Trophy",
           "options": ["Yes", "No"],
           "type": "Yes/ No select + Text entry"
@@ -459,7 +459,7 @@
         },
         {
           "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside your main job, have you been part of anything that gave you a fresh perspective or helped others?",
+          "question": "Outside your job, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
           "iconfilename": "Unity",
           "options": [
             "Volunteered for a social cause or NGO",
@@ -481,7 +481,7 @@
         },
         {
           "parameter": "Interests - RIASEC",
-          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "question": "Which of these best matches your work or life preferences?",
           "iconfilename": "Abilities",
           "options": [
             "Realistic – I like hands-on work, tools, machines, or outdoors",
@@ -501,20 +501,20 @@
       "questions": [
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-          "question": "What do you enjoy doing when you're not studying?",
+          "question": "Which hobbies, personal interests, or activities naturally excite and motivate you?",
           "iconfilename": "Hobbies",
           "type": "Short text"
         },
         {
           "parameter": "Achievements",
-          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "question": "Can you share an achievement, big or small, that you’re proud of ?",
           "iconfilename": "Trophy",
           "options": ["Yes", "No"],
           "type": "Yes/ No select + Text entry"
         },
         {
           "parameter": "Behavioral Skills + Life Skills + Cognitive Preferences + Learning Agility",
-          "question": "How do you usually deal with new or tough situations?",
+          "question": "When it comes to learning, thinking, and working with people — what feels most like you?",
           "iconfilename": "Social life",
           "options": [
             "I learn fast when I can try it myself",
@@ -537,7 +537,7 @@
         },
         {
           "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside studies, have you been part of anything that gave you a fresh perspective or helped others?",
+          "question": "Outside studies, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
           "iconfilename": "Unity",
           "options": [
             "Volunteered for a social cause or NGO",
@@ -559,7 +559,7 @@
         },
         {
           "parameter": "Interests - RIASEC",
-          "question": "Just go with your gut — which of these feels most ‘you’ when it comes to work or life preferences?",
+          "question": "Which of these best matches your work or life preferences?",
           "iconfilename": "Abilities",
           "options": [
             "Realistic – I like hands-on work, tools, machines, or outdoors",
@@ -579,13 +579,13 @@
       "questions": [
         {
           "parameter": "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-          "question": "What kind of things light you up — things that pull you in without much effort?",
+          "question": "Which hobbies, personal interests, or activities naturally excite and motivate you?",
           "iconfilename": "Hobbies",
           "type": "Short text"
         },
         {
           "parameter": "Achievements",
-          "question": "Let’s talk wins – have you accomplished something (big or small) that you feel genuinely proud of? Tell me about it – what was the achievement, and why does it matter to you?",
+          "question": "Can you share an achievement, big or small, that you’re proud of ?",
           "iconfilename": "Trophy",
           "options": ["Yes", "No"],
           "type": "Yes/ No select + Text entry"
@@ -663,7 +663,7 @@
         },
         {
           "parameter": "Achievements",
-          "question": "Can you share an achievement, big or small, that you’re proud of?",
+          "question": "Can you share an achievement, big or small, that you’re proud of ?",
           "iconfilename": "Trophy",
           "options": ["Yes", "No"],
           "type": "Yes/ No select + Text entry"

@@ -1,0 +1,57 @@
+{
+  "Talent attributes": {
+    "Core Code": {
+      "Core Tasks": "HR Strategy & Leadership",
+      "Supplementary Tasks": "C-Suite Advisor",
+      "Hot Technologies": "Machine Learning",
+      "Functional Skills": "Organizational Development",
+      "Skills": "Digital Transformation"
+    },
+    "DNA of work": {
+      "Work Activities": "People Strategy Execution",
+      "Work Values": "People-Centric Outcomes",
+      "Work Styles": "Strategic Leader",
+      "Abilities": "Executive Leadership"
+    },
+    "Interest Compass": {
+      "Career Interest Areas": "HR Leadership",
+      "Knowledge": "Change Management",
+      "Emerging Tasks": "AI/ML for HR"
+    },
+    "Upskills Unlocked": {
+      "Newly Acquired Skills": "Data-Driven HR Transformation",
+      "Emerging Tech Awareness": "Applied AI Awareness"
+    }
+  },
+  "Anchor attributes": {
+    "Passion Palette": {
+      "Hobbies": [
+        "Sports",
+        "Debating"
+      ],
+      "Personal Interests": "Technology Interest",
+      "Motivating Activities": "Leading Initiatives",
+      "Social Cause": "Children's Causes",
+      "Cultural Exposure": "Global Cultural Exposure",
+      "Volunteering": "Education Volunteering"
+    },
+    "Drives You": {
+      "Motivation Drivers": "Driving Business Impact",
+      "Competency": "Talent Management",
+      "Learning Agility": "Continuous Upskilling",
+      "Cognitive preferences": "Analytical & Data-Driven",
+      "Creative Inclinations": "Design Thinking Innovator"
+    },
+    "Rooted In You": {
+      "Achievements": "HR Heroes Award",
+      "Life Skills": "Public Speaking",
+      "Behavioural Skills": "Adaptability",
+      "OrganizationalSkills": "Program Management",
+      "Personality traits": "Proactive"
+    },
+    "Moves you forward": {
+      "Exploration Interest": "Emerging Tech Application",
+      "Future Study Intent": "Wharton Executive Education"
+    }
+  }
+}

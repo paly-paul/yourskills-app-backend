@@ -699,7 +699,7 @@ async def submit_job_attr_answers_without_cv(
     )
 
 
-@router.get("/anchor-questions/without-cv")
+@router.get("/anchor-questions/parameters-without-cv")
 async def get_anchor_questions_by_user_parameters(
     db=Depends(get_database),
     current_user=Depends(get_current_user)
@@ -1089,16 +1089,43 @@ async def get_cv_profile_data(
 ):
     uploads_collection = db["uploads"]
     answers_collection = db["answers"]
+    answers_without_cv_collection = db["answers_without_cv"]
+    proceed_without_cv_collection = db["proceed_without_cv"]
 
     user_id = str(current_user.get("_id"))
-
     query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
-    cv_doc = await uploads_collection.find_one(
-        query,
-        sort=[("uploaded_at", DESCENDING)]
-    )
-    parsed_data = cv_doc.get("parsed_data", {}) if cv_doc else {}
 
+    # 1️⃣ Fetch latest CV upload
+    latest_cv_doc = await uploads_collection.find_one(
+        query, sort=[("uploaded_at", DESCENDING)]
+    )
+
+    # 2️⃣ Fetch latest "without CV" document
+    latest_no_cv_doc = await proceed_without_cv_collection.find_one(
+        {"user_id": user_id}, sort=[("created_at", DESCENDING)]
+    )
+
+    # 3️⃣ Extract timestamps
+    latest_cv_time = latest_cv_doc.get("uploaded_at") if latest_cv_doc else None
+    latest_no_cv_time = latest_no_cv_doc.get("created_at") if latest_no_cv_doc else None
+
+    # 4️⃣ Determine active flow
+    active_flow = "without_cv"
+    has_cv = False
+    parsed_data = {}
+    active_answers_collection = answers_without_cv_collection
+    reference_id = None
+
+    if latest_cv_time and (not latest_no_cv_time or latest_cv_time > latest_no_cv_time):
+        active_flow = "with_cv"
+        has_cv = True
+        parsed_data = latest_cv_doc.get("parsed_data", {})
+        active_answers_collection = answers_collection
+        reference_id = str(latest_cv_doc.get("_id"))
+    else:
+        reference_id = str(latest_no_cv_doc.get("_id")) if latest_no_cv_doc else None
+
+    # 5️⃣ Initialize data structures
     talent_info = {
         "Education": parsed_data.get("Education", []),
         "Internships": parsed_data.get("Internships", []),
@@ -1109,7 +1136,11 @@ async def get_cv_profile_data(
         "Emerging Tasks": "",
         "Knowledge": "",
         "Skills": "",
-        "Abilities": "",
+        "Core Tasks": "",
+        "Supplementary Tasks": "",
+        "Emerging Tasks": "",
+        "Knowledge": "",
+        "Skills": "",
         "Work activities": "",
         "Work styles": "",
         "Work values": "",
@@ -1119,9 +1150,10 @@ async def get_cv_profile_data(
         "Functional Skills": "",
         "Certifications": parsed_data.get("Certifications", []),
         "Salary grades": "",
-        "Career Objective": parsed_data.get("Summary"),
+        "Career Objective": parsed_data.get("Summary") if has_cv else "",
         "Career Interest Areas": ""
     }
+
     anchor_attrs = {
         "Achievements": "",
         "Behavioral Skills": "",
@@ -1146,44 +1178,88 @@ async def get_cv_profile_data(
         "Personality Traits": ""
     }
 
+    # 6️⃣ Helper: fetch answers using cv_id or document_id
     async def fetch_answer(parameter: str, section: str):
-        ans_doc = await answers_collection.find_one(
-            {
-                "user_id": user_id,
-                "section": section,
-                "parameter": {"$regex": f".*{parameter}.*", "$options": "i"}
-            },
-            sort=[("created_at", DESCENDING)]
+        query_filter = {
+            "user_id": user_id,
+            "section": section,
+            "parameter": {"$regex": f".*{parameter}.*", "$options": "i"},
+        }
+        if has_cv:
+            query_filter["cv_id"] = reference_id
+        else:
+            query_filter["document_id"] = reference_id
+
+        ans_doc = await active_answers_collection.find_one(
+            query_filter, sort=[("created_at", DESCENDING)]
         )
-        if ans_doc:
-            return (
-                ans_doc.get("selected_options")
-                or ans_doc.get("free_text")
-                or ans_doc.get("value")
-            )
-        return None
+        if not ans_doc:
+            return None
 
-    for field in talent_info:
-        if not talent_info[field] or talent_info[field] in ["", [], None]:
+        # Fields that should only use "value"
+        VALUE_ONLY_FIELDS = [
+            "Core Tasks",
+            "Supplementary Tasks",
+            "Emerging Tasks",
+            "Knowledge",
+            "Skills",
+        ]
 
-            answer_val = await fetch_answer(field, "Cv Missing")
+        # ✅ Achievements → fetch from value.text if exists
+        if parameter.lower() == "achievements":
+            value_obj = ans_doc.get("value", {})
+            if isinstance(value_obj, dict):
+                return value_obj.get("text") or value_obj.get("selected")
+            return None
 
-            if not answer_val:
-                answer_val = await fetch_answer(field, "Job Attributes")
+        # ✅ Fields that should only use value (not free_text or selected_options)
+        if parameter in VALUE_ONLY_FIELDS:
+            return ans_doc.get("value")
+
+        # ✅ Default behavior for everything else
+        return (
+            ans_doc.get("free_text")
+            or ans_doc.get("selected_options")
+            or ans_doc.get("value")
+        )
+
+    # 7️⃣ Fill Talent Info — parsed_data first, fallback to answers
+    for field, value in talent_info.items():
+        db_field_name = "Career Interests" if field == "Career Interest Areas" else field
+
+        needs_fetch = (
+            field == "Career Interest Areas"
+            or not value
+            or value in ["", [], None]
+        )
+
+        if needs_fetch:
+            if has_cv:
+                answer_val = await fetch_answer(db_field_name, "Cv Missing")
+                if not answer_val:
+                    answer_val = await fetch_answer(db_field_name, "Job Attributes")
+            else:
+                answer_val = await fetch_answer(db_field_name, "Job Attributes")
+
             if answer_val:
                 talent_info[field] = answer_val
 
+    # 8️⃣ Fill Anchor Attributes
     for field in anchor_attrs:
         answer_val = await fetch_answer(field, "Anchor Attributes")
         if answer_val:
             anchor_attrs[field] = answer_val
 
+    # 9️⃣ Return final response
     return {
         "success": True,
+        "flow": active_flow,
+        "cv_id_or_document_id": reference_id,
+        "latest_cv_uploaded_at": latest_cv_time,
+        "latest_without_cv_created_at": latest_no_cv_time,
         "Talent Information": talent_info,
-        "Anchor Attributes": anchor_attrs
+        "Anchor Attributes": anchor_attrs,
     }
-
 
 
 # ---------------------------------------- Extraction without auth ---------------------------------------
@@ -1315,12 +1391,426 @@ async def extract_cv_no_auth(
     }
 
 
+# Function version (no FastAPI router)
+async def get_cv_profile_data(
+    db: AsyncIOMotorDatabase,
+    current_user: dict
+):
+    uploads_collection = db["uploads"]
+    answers_collection = db["answers"]
+    answers_without_cv_collection = db["answers_without_cv"]
+    proceed_without_cv_collection = db["proceed_without_cv"]
+
+    user_id = str(current_user.get("_id"))
+    query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
+
+    # 1️⃣ Fetch latest CV upload
+    latest_cv_doc = await uploads_collection.find_one(
+        query, sort=[("uploaded_at", DESCENDING)]
+    )
+
+    # 2️⃣ Fetch latest "without CV" document
+    latest_no_cv_doc = await proceed_without_cv_collection.find_one(
+        {"user_id": user_id}, sort=[("created_at", DESCENDING)]
+    )
+
+    # 3️⃣ Extract timestamps
+    latest_cv_time = latest_cv_doc.get("uploaded_at") if latest_cv_doc else None
+    latest_no_cv_time = latest_no_cv_doc.get("created_at") if latest_no_cv_doc else None
+
+    # 4️⃣ Determine active flow
+    active_flow = "without_cv"
+    has_cv = False
+    parsed_data = {}
+    active_answers_collection = answers_without_cv_collection
+    reference_id = None
+
+    if latest_cv_time and (not latest_no_cv_time or latest_cv_time > latest_no_cv_time):
+        active_flow = "with_cv"
+        has_cv = True
+        parsed_data = latest_cv_doc.get("parsed_data", {})
+        active_answers_collection = answers_collection
+        reference_id = str(latest_cv_doc.get("_id"))
+    else:
+        reference_id = str(latest_no_cv_doc.get("_id")) if latest_no_cv_doc else None
+
+    # 5️⃣ Initialize data structures
+    talent_info = {
+        "Education": parsed_data.get("Education", []),
+        "Internships": parsed_data.get("Internships", []),
+        "Projects": parsed_data.get("Projects", []),
+        "Experience": parsed_data.get("WorkExperience", []),
+        "Core Tasks": "",
+        "Supplementary Tasks": "",
+        "Emerging Tasks": "",
+        "Knowledge": "",
+        "Skills": "",
+        "Work activities": "",
+        "Work styles": "",
+        "Work values": "",
+        "Technical Skills": parsed_data.get("Skills", {}).get("HardSkills", []),
+        "Hot Technologies": "",
+        "Soft Skills": parsed_data.get("Skills", {}).get("SoftSkills", []),
+        "Functional Skills": "",
+        "Certifications": parsed_data.get("Certifications", []),
+        "Salary grades": "",
+        "Career Objective": parsed_data.get("Summary") if has_cv else "",
+        "Career Interest Areas": ""
+    }
+
+    anchor_attrs = {
+        "Achievements": "",
+        "Behavioral Skills": "",
+        "Interests": "",
+        "Competency": "",
+        "Cognitive Preferences": "",
+        "Creative Inclinations": "",
+        "Exploration Interest": "",
+        "Future study intent": "",
+        "Cultural Exposure": "",
+        "Emerging Tech Awareness": "",
+        "Hobbies": "",
+        "Learning Agility": "",
+        "Life Skills": "",
+        "Motivation Drivers": "",
+        "Motivating Activities": "",
+        "Newly Acquired Skills": "",
+        "Organizational Skills": "",
+        "Personal Interests": "",
+        "Social Causes": "",
+        "Volunteering": "",
+        "Personality Traits": ""
+    }
+
+    # 6️⃣ Helper: fetch answers using cv_id or document_id
+    async def fetch_answer(parameter: str, section: str):
+        query_filter = {
+            "user_id": user_id,
+            "section": section,
+            "parameter": {"$regex": f".*{parameter}.*", "$options": "i"},
+        }
+        if has_cv:
+            query_filter["cv_id"] = reference_id
+        else:
+            query_filter["document_id"] = reference_id
+
+        ans_doc = await active_answers_collection.find_one(
+            query_filter, sort=[("created_at", DESCENDING)]
+        )
+        if not ans_doc:
+            return None
+
+        VALUE_ONLY_FIELDS = [
+            "Core Tasks",
+            "Supplementary Tasks",
+            "Emerging Tasks",
+            "Knowledge",
+            "Skills",
+        ]
+
+        if parameter.lower() == "achievements":
+            value_obj = ans_doc.get("value", {})
+            if isinstance(value_obj, dict):
+                return value_obj.get("text") or value_obj.get("selected")
+            return None
+
+        if parameter in VALUE_ONLY_FIELDS:
+            return ans_doc.get("value")
+
+        return (
+            ans_doc.get("free_text")
+            or ans_doc.get("selected_options")
+            or ans_doc.get("value")
+        )
+
+    # 7️⃣ Fill Talent Info — parsed_data first, fallback to answers
+    for field, value in talent_info.items():
+        db_field_name = "Career Interests" if field == "Career Interest Areas" else field
+
+        needs_fetch = (
+            field == "Career Interest Areas"
+            or not value
+            or value in ["", [], None]
+        )
+
+        if needs_fetch:
+            if has_cv:
+                answer_val = await fetch_answer(db_field_name, "Cv Missing")
+                if not answer_val:
+                    answer_val = await fetch_answer(db_field_name, "Job Attributes")
+            else:
+                answer_val = await fetch_answer(db_field_name, "Job Attributes")
+
+            if answer_val:
+                talent_info[field] = answer_val
+
+    # 8️⃣ Fill Anchor Attributes
+    for field in anchor_attrs:
+        answer_val = await fetch_answer(field, "Anchor Attributes")
+        if answer_val:
+            anchor_attrs[field] = answer_val
+
+    # 9️⃣ Return final response
+    return {
+        "success": True,
+        "flow": active_flow,
+        "cv_id_or_document_id": reference_id,
+        "latest_cv_uploaded_at": latest_cv_time,
+        "latest_without_cv_created_at": latest_no_cv_time,
+        "Talent Information": talent_info,
+        "Anchor Attributes": anchor_attrs,
+    }
 
 
 
 
+def deduplicate_keywords(data):
+    """
+    Deduplicate values across all fields in the nested dictionary.
+    Converts lists to a single value and avoids repeated keywords.
+    """
+    seen = set()
+
+    def process_subdict(subdict):
+        for key, value in subdict.items():
+            if isinstance(value, str):
+                val = value.strip()
+                if val.lower() == "not specified" or val == "":
+                    continue
+                if val in seen:
+                    subdict[key] = ""
+                else:
+                    seen.add(val)
+            elif isinstance(value, list):
+                # Take first unique item in list
+                for item in value:
+                    if item not in seen:
+                        subdict[key] = item
+                        seen.add(item)
+                        break
+                else:
+                    subdict[key] = ""
+    
+    for main_key in data:
+        for sub_key in data[main_key]:
+            process_subdict(data[main_key][sub_key])
+    return data
+
+def to_catchy_keyword(phrase):
+    """
+    Converts a phrase to a concise, catchy keyword.
+    Picks up to 3 words, keeps the essence.
+    """
+    if not phrase or phrase.lower() == "not specified":
+        return phrase
+
+    # Remove extra whitespace
+    phrase = phrase.strip()
+
+    # Split phrase into words
+    words = phrase.split()
+
+    # Keep first 3 words maximum
+    if len(words) > 3:
+        words = words[:3]
+
+    # Capitalize first letter of each word
+    return " ".join([w.capitalize() for w in words])
 
 
+# ────────────── Route ──────────────
+
+@router.get("/summary/model")
+async def extract_cv_summary(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Uses Gemini to summarize only 'Talent Information' + 'Anchor Attributes'
+    from the user's CV/profile data.
+    Deduplicates repeated entries and returns single-value catchy keywords.
+    """
+
+    # 1️⃣ Get structured CV data from DB
+    cv_data = await get_cv_profile_data(db, current_user)
+
+    # 2️⃣ Extract only the needed sections
+    parsed_resume = {
+        "Talent Information": cv_data.get("Talent Information", {}),
+        "Anchor Attributes": cv_data.get("Anchor Attributes", {})
+    }
+
+    # 3️⃣ Build full extraction prompt (with all Talent & Anchor attribute instructions)
+    extract_prompt = f"""
+You are a precise JSON extractor. Your task is to extract the **most relevant, unique, and concise keywords or phrases** from a structured resume JSON.  
+
+Requirements:
+1. For each field, provide a **single short keyword or catchy phrase** (max 3 words).  
+2. Prefer **impactful, buzzword-style keywords** that can stand alone.  
+3. Ensure **all keywords are unique** across all fields.  
+4. If a field is missing or contains "Not specified", handle as:
+   - "Hobbies": output []
+   - All other fields: output "Not specified"  
+5. If a value appears relevant for multiple fields, assign it to the **most appropriate field** only.  
+6. Avoid generic duplicates. Each keyword must be distinct.
+
+**Talent attributes:**
+1. Core Code:
+- Core Tasks
+- Supplementary Tasks
+- Hot Technologies
+- Functional Skills
+- Skills
+
+2. DNA of Work:
+- Work Activities
+- Work Values
+- Work Styles
+- Abilities
+
+3. Interest Compass:
+- Career Interest Areas
+- Knowledge
+- Emerging Tasks
+
+4. Upskills Unlocked:
+- Newly Acquired Skills
+- Emerging Tech Awareness
+
+**Anchor attributes:**
+1. Passion Palette:
+- Hobbies (top 2 as a JSON array)
+- Personal Interests
+- Motivating Activities
+- Social Cause
+- Cultural Exposure
+- Volunteering
+
+2. Drives You:
+- Motivation Drivers
+- Competency
+- Learning Agility
+- Cognitive Preferences
+- Creative Inclinations
+
+3. Rooted In You:
+- Achievements
+- Life Skills
+- Behavioural Skills
+- Organizational Skills
+- Personality Traits
+
+4. Moves You Forward:
+- Exploration Interest
+- Future Study Intent
+
+**Output format:**  
+Provide a **single JSON object** with exactly this structure:
+
+{{
+  "Talent attributes": {{
+    "Core Code": {{
+      "Core Tasks": "",
+      "Supplementary Tasks": "",
+      "Hot Technologies": "",
+      "Functional Skills": "",
+      "Skills": ""
+    }},
+    "DNA of work": {{
+      "Work Activities": "",
+      "Work Values": "",
+      "Work Styles": "",
+      "Abilities": ""
+    }},
+    "Interest Compass": {{
+      "Career Interest Areas": "",
+      "Knowledge": "",
+      "Emerging Tasks": ""
+    }},
+    "Upskills Unlocked": {{
+      "Newly Acquired Skills": "",
+      "Emerging Tech Awareness": ""
+    }}
+  }},
+  "Anchor attributes": {{
+    "Passion Palette": {{
+      "Hobbies": [],
+      "Personal Interests": "",
+      "Motivating Activities": "",
+      "Social Cause": "",
+      "Cultural Exposure": "",
+      "Volunteering": ""
+    }},
+    "Drives You": {{
+      "Motivation Drivers": "",
+      "Competency": "",
+      "Learning Agility": "",
+      "Cognitive Preferences": "",
+      "Creative Inclinations": ""
+    }},
+    "Rooted In You": {{
+      "Achievements": "",
+      "Life Skills": "",
+      "Behavioural Skills": "",
+      "Organizational Skills": "",
+      "Personality Traits": ""
+    }},
+    "Moves you forward": {{
+      "Exploration Interest": "",
+      "Future Study Intent": ""
+    }}
+  }}
+}}
+
+**Instructions:**
+- Review each field in the input JSON.  
+- Extract the **most relevant item** per field.  
+- Convert it into a **short, unique, buzzword-style phrase**.  
+- Do not repeat keywords across fields.  
+
+Input JSON:
+{json.dumps(parsed_resume)}
+"""
 
 
+    # 4️⃣ Call Gemini model asynchronously
+    gemini_model = get_llm_model()
+    response = await asyncio.to_thread(
+        gemini_model.generate_content,
+        contents=[extract_prompt],
+        generation_config=genai.types.GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0
+        ),
+    )
 
+    # 5️⃣ Parse Gemini JSON output
+    try:
+        extracted_data = json.loads(response.text)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Failed to parse Gemini output",
+                "raw_output": response.text
+            }
+        )
+
+    # 6️⃣ Deduplicate across all fields
+    extracted_data = deduplicate_keywords(extracted_data)
+
+    # 7️⃣ Convert multi-word phrases to single catchy keywords
+    for main_key in extracted_data:
+        for sub_key in extracted_data[main_key]:
+            for field, value in extracted_data[main_key][sub_key].items():
+                if isinstance(value, str):
+                    extracted_data[main_key][sub_key][field] = to_catchy_keyword(value)
+                elif isinstance(value, list) and value:
+                    # Take only the first unique item as single value
+                    extracted_data[main_key][sub_key][field] = to_catchy_keyword(value[0])
+
+    # 8️⃣ Return cleaned summary
+    return {
+        "success": True,
+        "summary": extracted_data
+    }
