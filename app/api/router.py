@@ -1081,7 +1081,6 @@ async def get_cv_summary_without(
 
 #-------------------------------------Api for Model prediction Data ------------------------------------------------------------------------------
 
-
 @router.get("/cv/profile-data")
 async def get_cv_profile_data(
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -1095,21 +1094,15 @@ async def get_cv_profile_data(
     user_id = str(current_user.get("_id"))
     query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
 
-    # 1️⃣ Fetch latest CV upload
     latest_cv_doc = await uploads_collection.find_one(
         query, sort=[("uploaded_at", DESCENDING)]
     )
-
-    # 2️⃣ Fetch latest "without CV" document
     latest_no_cv_doc = await proceed_without_cv_collection.find_one(
         {"user_id": user_id}, sort=[("created_at", DESCENDING)]
     )
-
-    # 3️⃣ Extract timestamps
     latest_cv_time = latest_cv_doc.get("uploaded_at") if latest_cv_doc else None
     latest_no_cv_time = latest_no_cv_doc.get("created_at") if latest_no_cv_doc else None
 
-    # 4️⃣ Determine active flow
     active_flow = "without_cv"
     has_cv = False
     parsed_data = {}
@@ -1125,7 +1118,6 @@ async def get_cv_profile_data(
     else:
         reference_id = str(latest_no_cv_doc.get("_id")) if latest_no_cv_doc else None
 
-    # 5️⃣ Initialize data structures
     talent_info = {
         "Education": parsed_data.get("Education", []),
         "Internships": parsed_data.get("Internships", []),
@@ -1178,7 +1170,6 @@ async def get_cv_profile_data(
         "Personality Traits": ""
     }
 
-    # 6️⃣ Helper: fetch answers using cv_id or document_id
     async def fetch_answer(parameter: str, section: str):
         query_filter = {
             "user_id": user_id,
@@ -1195,8 +1186,6 @@ async def get_cv_profile_data(
         )
         if not ans_doc:
             return None
-
-        # Fields that should only use "value"
         VALUE_ONLY_FIELDS = [
             "Core Tasks",
             "Supplementary Tasks",
@@ -1205,25 +1194,20 @@ async def get_cv_profile_data(
             "Skills",
         ]
 
-        # ✅ Achievements → fetch from value.text if exists
         if parameter.lower() == "achievements":
             value_obj = ans_doc.get("value", {})
             if isinstance(value_obj, dict):
                 return value_obj.get("text") or value_obj.get("selected")
             return None
 
-        # ✅ Fields that should only use value (not free_text or selected_options)
         if parameter in VALUE_ONLY_FIELDS:
             return ans_doc.get("value")
-
-        # ✅ Default behavior for everything else
         return (
             ans_doc.get("free_text")
             or ans_doc.get("selected_options")
             or ans_doc.get("value")
         )
 
-    # 7️⃣ Fill Talent Info — parsed_data first, fallback to answers
     for field, value in talent_info.items():
         db_field_name = "Career Interests" if field == "Career Interest Areas" else field
 
@@ -1239,18 +1223,18 @@ async def get_cv_profile_data(
                 if not answer_val:
                     answer_val = await fetch_answer(db_field_name, "Job Attributes")
             else:
-                answer_val = await fetch_answer(db_field_name, "Job Attributes")
+                answer_val = await fetch_answer(db_field_name, "Cv Missing")
+                if not answer_val:
+                    answer_val = await fetch_answer(db_field_name, "Job Attributes")
 
             if answer_val:
                 talent_info[field] = answer_val
 
-    # 8️⃣ Fill Anchor Attributes
     for field in anchor_attrs:
         answer_val = await fetch_answer(field, "Anchor Attributes")
         if answer_val:
             anchor_attrs[field] = answer_val
 
-    # 9️⃣ Return final response
     return {
         "success": True,
         "flow": active_flow,
@@ -1391,7 +1375,6 @@ async def extract_cv_no_auth(
     }
 
 
-# Function version (no FastAPI router)
 async def get_cv_profile_data(
     db: AsyncIOMotorDatabase,
     current_user: dict
@@ -1404,21 +1387,17 @@ async def get_cv_profile_data(
     user_id = str(current_user.get("_id"))
     query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
 
-    # 1️⃣ Fetch latest CV upload
     latest_cv_doc = await uploads_collection.find_one(
         query, sort=[("uploaded_at", DESCENDING)]
     )
 
-    # 2️⃣ Fetch latest "without CV" document
     latest_no_cv_doc = await proceed_without_cv_collection.find_one(
         {"user_id": user_id}, sort=[("created_at", DESCENDING)]
     )
 
-    # 3️⃣ Extract timestamps
     latest_cv_time = latest_cv_doc.get("uploaded_at") if latest_cv_doc else None
     latest_no_cv_time = latest_no_cv_doc.get("created_at") if latest_no_cv_doc else None
 
-    # 4️⃣ Determine active flow
     active_flow = "without_cv"
     has_cv = False
     parsed_data = {}
@@ -1434,7 +1413,6 @@ async def get_cv_profile_data(
     else:
         reference_id = str(latest_no_cv_doc.get("_id")) if latest_no_cv_doc else None
 
-    # 5️⃣ Initialize data structures
     talent_info = {
         "Education": parsed_data.get("Education", []),
         "Internships": parsed_data.get("Internships", []),
@@ -1466,7 +1444,7 @@ async def get_cv_profile_data(
         "Cognitive Preferences": "",
         "Creative Inclinations": "",
         "Exploration Interest": "",
-        "Future study intent": "",
+        "Future Study Intent": "",
         "Cultural Exposure": "",
         "Emerging Tech Awareness": "",
         "Hobbies": "",
@@ -1482,7 +1460,6 @@ async def get_cv_profile_data(
         "Personality Traits": ""
     }
 
-    # 6️⃣ Helper: fetch answers using cv_id or document_id
     async def fetch_answer(parameter: str, section: str):
         query_filter = {
             "user_id": user_id,
@@ -1523,7 +1500,6 @@ async def get_cv_profile_data(
             or ans_doc.get("value")
         )
 
-    # 7️⃣ Fill Talent Info — parsed_data first, fallback to answers
     for field, value in talent_info.items():
         db_field_name = "Career Interests" if field == "Career Interest Areas" else field
 
@@ -1544,13 +1520,12 @@ async def get_cv_profile_data(
             if answer_val:
                 talent_info[field] = answer_val
 
-    # 8️⃣ Fill Anchor Attributes
+    
     for field in anchor_attrs:
         answer_val = await fetch_answer(field, "Anchor Attributes")
         if answer_val:
             anchor_attrs[field] = answer_val
 
-    # 9️⃣ Return final response
     return {
         "success": True,
         "flow": active_flow,
@@ -1560,8 +1535,6 @@ async def get_cv_profile_data(
         "Talent Information": talent_info,
         "Anchor Attributes": anchor_attrs,
     }
-
-
 
 
 def deduplicate_keywords(data):
@@ -1582,7 +1555,6 @@ def deduplicate_keywords(data):
                 else:
                     seen.add(val)
             elif isinstance(value, list):
-                # Take first unique item in list
                 for item in value:
                     if item not in seen:
                         subdict[key] = item
@@ -1604,21 +1576,14 @@ def to_catchy_keyword(phrase):
     if not phrase or phrase.lower() == "not specified":
         return phrase
 
-    # Remove extra whitespace
     phrase = phrase.strip()
 
-    # Split phrase into words
     words = phrase.split()
 
-    # Keep first 3 words maximum
     if len(words) > 3:
         words = words[:3]
 
-    # Capitalize first letter of each word
     return " ".join([w.capitalize() for w in words])
-
-
-# ────────────── Route ──────────────
 
 @router.get("/summary/model")
 async def extract_cv_summary(
@@ -1629,18 +1594,26 @@ async def extract_cv_summary(
     Uses Gemini to summarize only 'Talent Information' + 'Anchor Attributes'
     from the user's CV/profile data.
     Deduplicates repeated entries and returns single-value catchy keywords.
+    Ensures no empty fields, ignores input format.
     """
 
-    # 1️⃣ Get structured CV data from DB
     cv_data = await get_cv_profile_data(db, current_user)
 
-    # 2️⃣ Extract only the needed sections
     parsed_resume = {
         "Talent Information": cv_data.get("Talent Information", {}),
         "Anchor Attributes": cv_data.get("Anchor Attributes", {})
     }
 
-    # 3️⃣ Build full extraction prompt (with all Talent & Anchor attribute instructions)
+    key_map = {
+        "Behavioral Skills": "Behavioural Skills",
+        "Social Causes": "Social Cause",
+        "Future study intent": "Future Study Intent"
+    }
+    for section in parsed_resume:
+        for old_key, new_key in key_map.items():
+            if old_key in parsed_resume[section]:
+                parsed_resume[section][new_key] = parsed_resume[section].pop(old_key)
+
     extract_prompt = f"""
 You are a precise JSON extractor. Your task is to extract the **most relevant, unique, and concise keywords or phrases** from a structured resume JSON.  
 
@@ -1771,9 +1744,6 @@ Provide a **single JSON object** with exactly this structure:
 Input JSON:
 {json.dumps(parsed_resume)}
 """
-
-
-    # 4️⃣ Call Gemini model asynchronously
     gemini_model = get_llm_model()
     response = await asyncio.to_thread(
         gemini_model.generate_content,
@@ -1783,8 +1753,6 @@ Input JSON:
             temperature=0
         ),
     )
-
-    # 5️⃣ Parse Gemini JSON output
     try:
         extracted_data = json.loads(response.text)
     except json.JSONDecodeError:
@@ -1796,20 +1764,37 @@ Input JSON:
             }
         )
 
-    # 6️⃣ Deduplicate across all fields
     extracted_data = deduplicate_keywords(extracted_data)
 
-    # 7️⃣ Convert multi-word phrases to single catchy keywords
+    def safe_keyword(value):
+        """Return single catchy keyword; fallback to 'Not specified'."""
+        if not value:
+            return "Not specified"
+        if isinstance(value, list) and value:
+            return to_catchy_keyword(value[0]) or "Not specified"
+        if isinstance(value, str):
+            return to_catchy_keyword(value) or "Not specified"
+        return "Not specified"
+
     for main_key in extracted_data:
         for sub_key in extracted_data[main_key]:
             for field, value in extracted_data[main_key][sub_key].items():
-                if isinstance(value, str):
-                    extracted_data[main_key][sub_key][field] = to_catchy_keyword(value)
-                elif isinstance(value, list) and value:
-                    # Take only the first unique item as single value
-                    extracted_data[main_key][sub_key][field] = to_catchy_keyword(value[0])
+                extracted_data[main_key][sub_key][field] = safe_keyword(value)
 
-    # 8️⃣ Return cleaned summary
+    def remove_not_specified(d):
+        """Recursively remove keys with value 'Not specified'."""
+        if isinstance(d, dict):
+            return {
+                k: remove_not_specified(v)
+                for k, v in d.items()
+                if v != "Not specified" and remove_not_specified(v) != {}
+            }
+        elif isinstance(d, list):
+            return [remove_not_specified(i) for i in d if i != "Not specified"]
+        return d
+
+    extracted_data = remove_not_specified(extracted_data)
+
     return {
         "success": True,
         "summary": extracted_data

@@ -150,6 +150,7 @@ Given a resume file, extract structured JSON with the following fields:
 
 {
   "Name": "",
+  "DOB" : "",
   "Email": "",
   "Phone": "",
   "Address": "",
