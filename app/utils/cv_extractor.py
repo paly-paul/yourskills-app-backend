@@ -141,16 +141,177 @@ def extract_job_role(parsed_json):
     return None
 
 
+# def extract_cv_data_from_file(filepath: str, mime_type: str):
+    
+#     prompt = """
+# You are an expert resume parser.
+
+# Given a resume file, extract structured JSON with the following fields:
+
+# {
+#   "Name": "",
+#   "DOB" : "",
+#   "Email": "",
+#   "Phone": "",
+#   "Address": "",
+#   "LinkedIn": "",
+#   "Summary": "",
+#   "Skills": {
+#     "HardSkills": [],
+#     "SoftSkills": [],
+#     "Tools": []
+#   },
+  
+#   "WorkExperience": [
+#     {
+#       "Company": "",
+#       "Role": "",
+#       "Duration": "",
+#       "Description": ""
+#     }
+#   ],
+#   "Education": [
+#     {
+#       "Degree": "",
+#       "Institution": "",
+#       "Grade": "",
+#       "Year": ""
+#     }
+#   ],
+#   "Certifications": [
+#     {
+#       "Name": "",
+#       "Issuer": "",
+#       "Year": ""
+#     }
+#   ],
+#   "Projects": [
+#     {
+#       "Title": "",
+#       "Description": ""
+#     }
+#   ],
+#   "Languages": [
+#     {
+#       "Language": "",
+#       "Proficiency": ""
+#     }
+#   ],
+#   "Awards": [
+#     {
+#       "Title": "",
+#       "Issuer": "",
+#       "Year": ""
+#     }
+#   ],
+#   "VolunteerExperience": [
+#     {
+#       "Organization": "",
+#       "Role": "",
+#       "Duration": "",
+#       "Description": ""
+#     }
+#   ],
+#   "Hobbies": [],
+#   "OtherSections": [
+#     {
+#       "Title": "",
+#       "Description": ""
+#     }
+#   ],
+#   "YearsOfExperience": 0.0
+# }
+
+# Instructions:
+# 1. Extract data **only if explicitly mentioned** in the resume text.
+# 2. Do **NOT** infer, guess, or add any information not directly written in the document.
+
+# 3. **Skills Extraction Rules:**
+#    - Only extract skills from sections explicitly labeled as:
+#      “Skills”, “Technical Skills”, “Core Competencies”, “Key Skills”, “Tech Stack”, or “Technologies”.
+#    - Categorize as follows:
+#      - **Tools** → Include all items listed under “Technical Skills”, “Tech Stack”, or similar headings.
+#        This includes programming languages, software, frameworks, platforms, and technologies.
+#        Example: Python, Java, AWS, Excel, React, Git, Figma, etc.
+#      - **HardSkills** → Only include non-tool, domain-specific, or professional capabilities explicitly listed under “Skills” or “Core Competencies”.
+#        Example: Data Analysis, Project Management, Financial Modeling, etc.
+#      - **SoftSkills** → Only include personal or interpersonal skills explicitly listed, such as Communication, Leadership, Problem Solving, etc.
+#    - Do not extract or infer skills from experience descriptions, project details, or summaries.
+#    - Record skills exactly as written (no normalization or assumption).
+#    - If a skill category is not present, leave it empty.
+
+# 4. **WorkExperience, Education, Certifications, Projects, etc.:**
+#    - Extract only explicit data.
+#    - Skip any field not mentioned.
+
+# 5. **YearsOfExperience:**
+#    - Extract only if the resume explicitly states a value (e.g., “5 years of experience”).
+#    - Do not compute or infer from job dates.
+
+# 6. Return only **valid JSON**, starting with `{` and ending with `}`.
+# 7. Do not summarize, rephrase, or infer any data.
+# 8. If any section is missing, return an empty string or empty array for that section.
+# """
+
+#     try:
+#         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+#             file_text = extract_docx_text(filepath)
+#             content_input = [file_text, prompt]
+#         else:
+#             file_bytes = pathlib.Path(filepath).read_bytes()
+#             content_input = [
+#                 {"mime_type": mime_type, "data": file_bytes},
+#                 prompt
+#             ]
+
+#         response = model.generate_content(content_input, stream=False)
+#         response_text = response.text.strip()
+
+#         if response_text.startswith("```json"):
+#             response_text = response_text[7:]
+#         if response_text.endswith("```"):
+#             response_text = response_text[:-3]
+
+#         response_text = response_text.strip()
+#         start_idx = response_text.find('{')
+#         end_idx = response_text.rfind('}')
+#         response_text = response_text[start_idx:end_idx+1]
+
+#         parsed_json = json.loads(response_text)
+#         parsed_json = clean_json(parsed_json)
+
+#         work_exp = parsed_json.get("WorkExperience", [])
+#         years_from_work = calculate_years_of_experience(work_exp)
+
+#         if years_from_work > 0:
+#             parsed_json["YearsOfExperience"] = years_from_work
+#         else:
+#             parsed_json["YearsOfExperience"] = extract_years_from_summary(parsed_json.get("Summary", ""))
+
+        
+#         parsed_json["JobRole"] = extract_job_role(parsed_json)
+
+#         return parsed_json
+
+#     except Exception as e:
+#         print("CV Extraction Error:", str(e))
+#         return {"error": "Failed to parse CV data"}
+
 def extract_cv_data_from_file(filepath: str, mime_type: str):
     
     prompt = """
-You are an expert resume parser.
+You are an expert AI Resume Parser and Career Analyst.
 
-Given a resume file, extract structured JSON with the following fields:
+Given a resume file, extract and return a **single structured JSON** with **all personal, professional, and analytical details**.
+
+Return only valid JSON (no commentary, no markdown).  
+If any section is missing, leave it empty or "Not specified".
+
+Schema:
 
 {
   "Name": "",
-  "DOB" : "",
+  "DOB": "",
   "Email": "",
   "Phone": "",
   "Address": "",
@@ -161,7 +322,6 @@ Given a resume file, extract structured JSON with the following fields:
     "SoftSkills": [],
     "Tools": []
   },
-  
   "WorkExperience": [
     {
       "Company": "",
@@ -219,38 +379,73 @@ Given a resume file, extract structured JSON with the following fields:
       "Description": ""
     }
   ],
-  "YearsOfExperience": 0.0
+  "YearsOfExperience": 0.0,
+
+  "Talent Information": {
+    "Core Tasks": "",
+    "Supplementary Tasks": "",
+    "Emerging Tasks": "",
+    "Knowledge": "",
+    "Skills": "",
+    "Abilities": "",
+    "Work activities": "",
+    "Work styles": "",
+    "Work values": "",
+    "Technical Skills": "",
+    "Hot Technologies": "",
+    "Soft Skills": "",
+    "Functional Skills": "",
+    "Certifications": [
+      {
+        "Name": "",
+        "Provider": "",
+        "Year": ""
+      }
+    ],
+    "Salary grades": "",
+    "Career Objective": ""
+  },
+  "Anchor Attributes": {
+    "Achievements": "",
+    "Behavioral Skills": "",
+    "Interests": "",
+    "Career Interest Areas": "",
+    "Competency": "",
+    "Cognitive Preferences": "",
+    "Creative Inclinations": "",
+    "Exploration Interest": "",
+    "Future study intent": "",
+    "Cultural Exposure": "",
+    "Emerging Tech Awareness": "",
+    "Hobbies": "",
+    "Learning Agility": "",
+    "Life Skills": "",
+    "Motivation Drivers": "",
+    "Motivating Activities": "",
+    "Newly Acquired Skills": "",
+    "Organizational Skills": "",
+    "Personal Interests": "",
+    "Social Causes": "",
+    "Volunteering": "",
+    "Personality Traits": ""
+  },
+  "Know about yourself": {
+    "Inferred Persona Insights": "",
+    "Career stage category": "Based on extracted experience years and gaps classify into: Student, Early Professional, Mid Career Pivot, Job Seeker"
+  }
 }
 
-Instructions:
-1. Extract data **only if explicitly mentioned** in the resume text.
-2. Do **NOT** infer, guess, or add any information not directly written in the document.
-
-3. **Skills Extraction Rules:**
-   - Only extract skills from sections explicitly labeled as:
-     “Skills”, “Technical Skills”, “Core Competencies”, “Key Skills”, “Tech Stack”, or “Technologies”.
-   - Categorize as follows:
-     - **Tools** → Include all items listed under “Technical Skills”, “Tech Stack”, or similar headings.
-       This includes programming languages, software, frameworks, platforms, and technologies.
-       Example: Python, Java, AWS, Excel, React, Git, Figma, etc.
-     - **HardSkills** → Only include non-tool, domain-specific, or professional capabilities explicitly listed under “Skills” or “Core Competencies”.
-       Example: Data Analysis, Project Management, Financial Modeling, etc.
-     - **SoftSkills** → Only include personal or interpersonal skills explicitly listed, such as Communication, Leadership, Problem Solving, etc.
-   - Do not extract or infer skills from experience descriptions, project details, or summaries.
-   - Record skills exactly as written (no normalization or assumption).
-   - If a skill category is not present, leave it empty.
-
-4. **WorkExperience, Education, Certifications, Projects, etc.:**
-   - Extract only explicit data.
-   - Skip any field not mentioned.
-
-5. **YearsOfExperience:**
-   - Extract only if the resume explicitly states a value (e.g., “5 years of experience”).
-   - Do not compute or infer from job dates.
-
-6. Return only **valid JSON**, starting with `{` and ending with `}`.
-7. Do not summarize, rephrase, or infer any data.
-8. If any section is missing, return an empty string or empty array for that section.
+Rules:
+1. Extract only explicitly mentioned information from the resume.
+2. Categorize skills as:
+   - Tools → programming languages, software, frameworks, technologies.
+   - HardSkills → domain or professional competencies.
+   - SoftSkills → interpersonal/personal traits.
+3. Never infer or guess missing values — use "Not specified" if unavailable.
+4. Keep arrays for WorkExperience, Education, Projects, etc.
+5. For YearsOfExperience, extract only if explicitly mentioned; do not infer.
+6. Respond only with valid JSON — starting with `{` and ending with `}`.
+7. Provide **augmented information** — inferred job level, personality traits, career potential, etc.
 """
 
     try:
@@ -288,7 +483,6 @@ Instructions:
         else:
             parsed_json["YearsOfExperience"] = extract_years_from_summary(parsed_json.get("Summary", ""))
 
-        
         parsed_json["JobRole"] = extract_job_role(parsed_json)
 
         return parsed_json
@@ -296,7 +490,6 @@ Instructions:
     except Exception as e:
         print("CV Extraction Error:", str(e))
         return {"error": "Failed to parse CV data"}
-
 
 
 def predict_audience_type(parsed_data: Dict) -> str:
@@ -344,11 +537,11 @@ def predict_audience_type(parsed_data: Dict) -> str:
 
     if not currently_working and employment_gap:
         return "Job Seeker"
-    elif total_years <= 1:
+    elif total_years == 0:
         return "Student"
-    elif 1 < total_years <= 4:
+    elif 0 < total_years <= 5:
         return "Early Professional (2-3 years of experience)"
-    elif total_years > 4:
+    elif total_years > 5:
         return "Mid Career Pivot"
     else:
         return "Early Professional (2-3 years of experience)"
