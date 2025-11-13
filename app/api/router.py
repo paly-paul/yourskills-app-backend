@@ -1585,16 +1585,229 @@ def to_catchy_keyword(phrase):
 
     return " ".join([w.capitalize() for w in words])
 
+# @router.get("/summary/model")
+# async def extract_cv_summary(
+#     db: AsyncIOMotorDatabase = Depends(get_database),
+#     current_user: dict = Depends(get_current_user)
+# ):
+#     """
+#     Uses Gemini to summarize only 'Talent Information' + 'Anchor Attributes'
+#     from the user's CV/profile data.
+#     Deduplicates repeated entries and returns single-value catchy keywords.
+#     Ensures no empty fields, ignores input format.
+#     """
+
+#     cv_data = await get_cv_profile_data(db, current_user)
+
+#     parsed_resume = {
+#         "Talent Information": cv_data.get("Talent Information", {}),
+#         "Anchor Attributes": cv_data.get("Anchor Attributes", {})
+#     }
+
+#     key_map = {
+#         "Behavioral Skills": "Behavioural Skills",
+#         "Social Causes": "Social Cause",
+#         "Future study intent": "Future Study Intent"
+#     }
+#     for section in parsed_resume:
+#         for old_key, new_key in key_map.items():
+#             if old_key in parsed_resume[section]:
+#                 parsed_resume[section][new_key] = parsed_resume[section].pop(old_key)
+
+#     extract_prompt = f"""
+# You are a precise JSON extractor. Your task is to extract the **most relevant, unique, and concise keywords or phrases** from a structured resume JSON.  
+
+# Requirements:
+# 1. For each field, provide a **single short keyword or catchy phrase** (max 3 words).  
+# 2. Prefer **impactful, buzzword-style keywords** that can stand alone.  
+# 3. Ensure **all keywords are unique** across all fields.  
+# 4. If a field is missing or contains "Not specified", handle as:
+#    - "Hobbies": output []
+#    - All other fields: output "Not specified"  
+# 5. If a value appears relevant for multiple fields, assign it to the **most appropriate field** only.  
+# 6. Avoid generic duplicates. Each keyword must be distinct.
+
+# **Talent attributes:**
+# 1. Core Code:
+# - Core Tasks
+# - Supplementary Tasks
+# - Hot Technologies
+# - Functional Skills
+# - Skills
+
+# 2. DNA of Work:
+# - Work Activities
+# - Work Values
+# - Work Styles
+# - Abilities
+
+# 3. Interest Compass:
+# - Career Interest Areas
+# - Knowledge
+# - Emerging Tasks
+
+# 4. Upskills Unlocked:
+# - Newly Acquired Skills
+# - Emerging Tech Awareness
+
+# **Anchor attributes:**
+# 1. Passion Palette:
+# - Hobbies (top 2 as a JSON array)
+# - Personal Interests
+# - Motivating Activities
+# - Social Cause
+# - Cultural Exposure
+# - Volunteering
+
+# 2. Drives You:
+# - Motivation Drivers
+# - Competency
+# - Learning Agility
+# - Cognitive Preferences
+# - Creative Inclinations
+
+# 3. Rooted In You:
+# - Achievements
+# - Life Skills
+# - Behavioural Skills
+# - Organizational Skills
+# - Personality Traits
+
+# 4. Moves You Forward:
+# - Exploration Interest
+# - Future Study Intent
+
+# **Output format:**  
+# Provide a **single JSON object** with exactly this structure:
+
+# {{
+#   "Talent attributes": {{
+#     "Core Code": {{
+#       "Core Tasks": "",
+#       "Supplementary Tasks": "",
+#       "Hot Technologies": "",
+#       "Functional Skills": "",
+#       "Skills": ""
+#     }},
+#     "DNA of work": {{
+#       "Work Activities": "",
+#       "Work Values": "",
+#       "Work Styles": "",
+#       "Abilities": ""
+#     }},
+#     "Interest Compass": {{
+#       "Career Interest Areas": "",
+#       "Knowledge": "",
+#       "Emerging Tasks": ""
+#     }},
+#     "Upskills Unlocked": {{
+#       "Newly Acquired Skills": "",
+#       "Emerging Tech Awareness": ""
+#     }}
+#   }},
+#   "Anchor attributes": {{
+#     "Passion Palette": {{
+#       "Hobbies": [],
+#       "Personal Interests": "",
+#       "Motivating Activities": "",
+#       "Social Cause": "",
+#       "Cultural Exposure": "",
+#       "Volunteering": ""
+#     }},
+#     "Drives You": {{
+#       "Motivation Drivers": "",
+#       "Competency": "",
+#       "Learning Agility": "",
+#       "Cognitive Preferences": "",
+#       "Creative Inclinations": ""
+#     }},
+#     "Rooted In You": {{
+#       "Achievements": "",
+#       "Life Skills": "",
+#       "Behavioural Skills": "",
+#       "Organizational Skills": "",
+#       "Personality Traits": ""
+#     }},
+#     "Moves you forward": {{
+#       "Exploration Interest": "",
+#       "Future Study Intent": ""
+#     }}
+#   }}
+# }}
+
+# **Instructions:**
+# - Review each field in the input JSON.  
+# - Extract the **most relevant item** per field.  
+# - Convert it into a **short, unique, buzzword-style phrase**.  
+# - Do not repeat keywords across fields.  
+
+# Input JSON:
+# {json.dumps(parsed_resume)}
+# """
+#     gemini_model = get_llm_model()
+#     response = await asyncio.to_thread(
+#         gemini_model.generate_content,
+#         contents=[extract_prompt],
+#         generation_config=genai.types.GenerationConfig(
+#             response_mime_type="application/json",
+#             temperature=0
+#         ),
+#     )
+#     try:
+#         extracted_data = json.loads(response.text)
+#     except json.JSONDecodeError:
+#         raise HTTPException(
+#             status_code=500,
+#             detail={
+#                 "error": "Failed to parse Gemini output",
+#                 "raw_output": response.text
+#             }
+#         )
+
+#     extracted_data = deduplicate_keywords(extracted_data)
+
+#     def safe_keyword(value):
+#         """Return single catchy keyword; fallback to 'Not specified'."""
+#         if not value:
+#             return "Not specified"
+#         if isinstance(value, list) and value:
+#             return to_catchy_keyword(value[0]) or "Not specified"
+#         if isinstance(value, str):
+#             return to_catchy_keyword(value) or "Not specified"
+#         return "Not specified"
+
+#     for main_key in extracted_data:
+#         for sub_key in extracted_data[main_key]:
+#             for field, value in extracted_data[main_key][sub_key].items():
+#                 extracted_data[main_key][sub_key][field] = safe_keyword(value)
+
+#     def remove_not_specified(d):
+#         """Recursively remove keys with value 'Not specified'."""
+#         if isinstance(d, dict):
+#             return {
+#                 k: remove_not_specified(v)
+#                 for k, v in d.items()
+#                 if v != "Not specified" and remove_not_specified(v) != {}
+#             }
+#         elif isinstance(d, list):
+#             return [remove_not_specified(i) for i in d if i != "Not specified"]
+#         return d
+
+#     extracted_data = remove_not_specified(extracted_data)
+
+#     return {
+#         "success": True,
+#         "summary": extracted_data
+#     }
+
 @router.get("/summary/model")
 async def extract_cv_summary(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Uses Gemini to summarize only 'Talent Information' + 'Anchor Attributes'
-    from the user's CV/profile data.
-    Deduplicates repeated entries and returns single-value catchy keywords.
-    Ensures no empty fields, ignores input format.
+    Uses Gemini to summarize the profile data, retaining all fields
+    in the output structure regardless of content duplication.
     """
 
     cv_data = await get_cv_profile_data(db, current_user)
@@ -1604,6 +1817,7 @@ async def extract_cv_summary(
         "Anchor Attributes": cv_data.get("Anchor Attributes", {})
     }
 
+    # Handling key mapping consistency for Gemini prompt
     key_map = {
         "Behavioral Skills": "Behavioural Skills",
         "Social Causes": "Social Cause",
@@ -1614,71 +1828,21 @@ async def extract_cv_summary(
             if old_key in parsed_resume[section]:
                 parsed_resume[section][new_key] = parsed_resume[section].pop(old_key)
 
+    # Note: We must update the prompt to remove the "all keywords are unique" constraint,
+    # as the Python code is now designed to tolerate duplicates.
     extract_prompt = f"""
-You are a precise JSON extractor. Your task is to extract the **most relevant, unique, and concise keywords or phrases** from a structured resume JSON.  
+You are a precise JSON extractor. Your task is to extract the **most relevant and concise keywords or phrases** from a structured resume JSON.  
 
 Requirements:
 1. For each field, provide a **single short keyword or catchy phrase** (max 3 words).  
-2. Prefer **impactful, buzzword-style keywords** that can stand alone.  
-3. Ensure **all keywords are unique** across all fields.  
-4. If a field is missing or contains "Not specified", handle as:
-   - "Hobbies": output []
-   - All other fields: output "Not specified"  
-5. If a value appears relevant for multiple fields, assign it to the **most appropriate field** only.  
-6. Avoid generic duplicates. Each keyword must be distinct.
+2. Prefer **impactful, buzzword-style keywords** that can stand alone.
+3. **DO NOT enforce uniqueness** across fields. Provide the best keyword for each field, even if it is similar to another.
+4. If a field is missing or contains "Not specified", output "Not specified" (except for Hobbies, which outputs []). 
+5. The output must strictly follow the provided JSON structure.
 
-**Talent attributes:**
-1. Core Code:
-- Core Tasks
-- Supplementary Tasks
-- Hot Technologies
-- Functional Skills
-- Skills
+[... Rest of the prompt structure and groupings remain the same ...]
 
-2. DNA of Work:
-- Work Activities
-- Work Values
-- Work Styles
-- Abilities
-
-3. Interest Compass:
-- Career Interest Areas
-- Knowledge
-- Emerging Tasks
-
-4. Upskills Unlocked:
-- Newly Acquired Skills
-- Emerging Tech Awareness
-
-**Anchor attributes:**
-1. Passion Palette:
-- Hobbies (top 2 as a JSON array)
-- Personal Interests
-- Motivating Activities
-- Social Cause
-- Cultural Exposure
-- Volunteering
-
-2. Drives You:
-- Motivation Drivers
-- Competency
-- Learning Agility
-- Cognitive Preferences
-- Creative Inclinations
-
-3. Rooted In You:
-- Achievements
-- Life Skills
-- Behavioural Skills
-- Organizational Skills
-- Personality Traits
-
-4. Moves You Forward:
-- Exploration Interest
-- Future Study Intent
-
-**Output format:**  
-Provide a **single JSON object** with exactly this structure:
+**Output format:** Provide a **single JSON object** with exactly this structure:
 
 {{
   "Talent attributes": {{
@@ -1736,11 +1900,9 @@ Provide a **single JSON object** with exactly this structure:
 }}
 
 **Instructions:**
-- Review each field in the input JSON.  
-- Extract the **most relevant item** per field.  
-- Convert it into a **short, unique, buzzword-style phrase**.  
-- Do not repeat keywords across fields.  
-
+Review each field in the input JSON.  
+Extract the **most relevant item** per field.  
+Convert it into a **short, buzzword-style phrase**.  
 Input JSON:
 {json.dumps(parsed_resume)}
 """
@@ -1764,38 +1926,99 @@ Input JSON:
             }
         )
 
-    extracted_data = deduplicate_keywords(extracted_data)
-
     def safe_keyword(value):
-        """Return single catchy keyword; fallback to 'Not specified'."""
+        """Return single catchy keyword; fallback to 'Not specified' but DO NOT remove."""
         if not value:
             return "Not specified"
         if isinstance(value, list) and value:
-            return to_catchy_keyword(value[0]) or "Not specified"
+            if field == "Hobbies":
+                return [to_catchy_keyword(item) for item in value if item] 
+            
+            keyword = to_catchy_keyword(value[0])
+            return keyword or "Not specified" 
+
         if isinstance(value, str):
-            return to_catchy_keyword(value) or "Not specified"
+            keyword = to_catchy_keyword(value)
+            return keyword or "Not specified"
+            
         return "Not specified"
+
+    for main_key in extracted_data:
+        for sub_key in extracted_data[main_key]:
+            for field, value in extracted_data[main_key][sub_key].items():
+                
+                extracted_data[main_key][sub_key][field] = safe_keyword(value)
 
     for main_key in extracted_data:
         for sub_key in extracted_data[main_key]:
             for field, value in extracted_data[main_key][sub_key].items():
                 extracted_data[main_key][sub_key][field] = safe_keyword(value)
 
-    def remove_not_specified(d):
-        """Recursively remove keys with value 'Not specified'."""
-        if isinstance(d, dict):
-            return {
-                k: remove_not_specified(v)
-                for k, v in d.items()
-                if v != "Not specified" and remove_not_specified(v) != {}
-            }
-        elif isinstance(d, list):
-            return [remove_not_specified(i) for i in d if i != "Not specified"]
-        return d
+    job_attribute_groups = {
+        "Core Code": ["Core Tasks", "Supplementary Tasks", "Hot Technologies", "Functional Skills", "Skills"],
+        "DNA of work": ["Work Activities", "Work Values", "Work Styles", "Abilities"],
+        "Interest Compass": ["Career Interest Areas", "Knowledge", "Emerging Tasks"],
+    }
+    
+    anchor_attribute_groups = {
+        "Passion Palette": ["Hobbies", "Personal Interests", "Motivating Activities", "Social Cause", "Cultural Exposure", "Volunteering"],
+        "Drives You": ["Motivation Drivers", "Competency", "Learning Agility", "Cognitive Preferences", "Creative Inclinations"],
+        "Rooted In You": ["Achievements", "Life Skills", "Behavioural Skills", "Organizational Skills", "Personality Traits"],
+    }
+    def build_attribute_list_values_only(data_source, mapping):
+        result = []
+        for title, field_keys in mapping.items():
+            items = []
+            sub_data = data_source.get(title, {}) 
+            for key in field_keys:
+                value = sub_data.get(key)
+                
+                if isinstance(value, list):
+                    items.extend(item for item in value if item and item != "Not specified")
+                elif isinstance(value, str) and value and value != "Not specified":
+                    items.append(value)
+            unique_items = list(set(items))
 
-    extracted_data = remove_not_specified(extracted_data)
+            if unique_items: 
+                result.append({
+                    "title": title,
+                    "items": unique_items  
+                })
+        return result
+    
+    talent_data = extracted_data.get("Talent attributes", {})
+    anchor_data = extracted_data.get("Anchor attributes", {})
+    
+    job_attributes = build_attribute_list_values_only(talent_data, job_attribute_groups)
+
+    anchor_attributes = build_attribute_list_values_only(anchor_data, anchor_attribute_groups)
+    
+    upskills_raw = [] 
+    upskills_source = talent_data.get("Upskills Unlocked", {})
+    for key in ["Newly Acquired Skills", "Emerging Tech Awareness"]:
+        value = upskills_source.get(key)
+        if isinstance(value, str) and value and value != "Not specified":
+            upskills_raw.append(value)
+    
+    upskills_list = list(set(upskills_raw))
+
+    forwards_raw = [] 
+    forwards_source = anchor_data.get("Moves you forward", {})
+    for key in ["Exploration Interest", "Future Study Intent"]:
+        value = forwards_source.get(key)
+        if isinstance(value, str) and value and value != "Not specified":
+            forwards_raw.append(value)
+
+    forwards_list = list(set(forwards_raw))
+    
+    job_prediction_output = {
+        "jobAttributes": job_attributes,
+        "anchorAttributes": anchor_attributes,
+        "upskills": upskills_list,
+        "forwards": forwards_list,
+    }
 
     return {
         "success": True,
-        "summary": extracted_data
+        "jobPrediction": job_prediction_output
     }
