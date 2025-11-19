@@ -115,42 +115,38 @@ async def extract_cv(
     db=Depends(get_database),
     current_user=Depends(get_current_user)
 ):
-    
+    # ---------------- SAVE TEMP FILE ----------------
     with tempfile.NamedTemporaryFile(delete=False, suffix="." + file.filename.split('.')[-1]) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
 
+    # ---------------- EXTRACT RESUME DATA ----------------
     data = extract_cv_data_from_file(tmp_path, file.content_type)
+
     if "error" in data:
         return {"message": "CV extraction failed", "error": data["error"]}
 
+    # ---------------- SAVE PARSED CV ----------------
     saved_cv = await save_extracted_cv_data(
         user_id=current_user["id"],
         parsed_data=data,
         file_path=tmp_path,
         db=db
     )
+
     cv_id_str = str(saved_cv.get("_id"))
 
-    softskills_suggestions, technical_skills_suggestions, certifications_suggestions = [], [], []
+    # -------------------------------------------------------
+    # 🔥 NEW: DIRECTLY READ LLM-GENERATED FIELDS (NO LLM CALL)
+    # -------------------------------------------------------
 
-    if not data.get("Skills", {}).get("SoftSkills") or \
-       not data.get("Skills", {}).get("HardSkills") or \
-       not data.get("Certifications"):
+    softskills_suggestions = data.get("LLM_Generated_Soft_Skills", [])
+    technical_skills_suggestions = data.get("LLM_Generated_Technical_Skills", [])
+    certifications_suggestions = data.get("LLM_Generated_Certificates", [])
+    certifications_suggestions = [cert.get("Name") for cert in certifications_suggestions]
 
-        try:
-            suggestions = await generate_missing_field_suggestions(data)
-        except Exception:
-            suggestions = {
-                "softskills_suggestions": [],
-                "technical_skills_suggestions": [],
-                "certifications_suggestions": []
-            }
 
-        softskills_suggestions = suggestions.get("softskills_suggestions", [])
-        technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
-        certifications_suggestions = suggestions.get("certifications_suggestions", [])
-
+    # ---------------- SAVE SUGGESTIONS TO DB ----------------
     await save_skill_suggestions(
         user_id=current_user["id"],
         cv_id=cv_id_str,
@@ -160,21 +156,26 @@ async def extract_cv(
         db=db
     )
 
+    # ---------------- LOAD QUESTIONS FROM DB ----------------
     questions_collection = db["questions"]
     questions_doc = await questions_collection.find_one({})
-    audience_type = predict_audience_type(data)
 
+    audience_type = predict_audience_type(data)
     job_questions_with_options = []
 
     if questions_doc:
         job_attributes = questions_doc.get("Job attributes", [])
-        matching_job = next((item for item in job_attributes if item.get("audienceType") == audience_type), None)
+        matching_job = next(
+            (item for item in job_attributes if item.get("audienceType") == audience_type),
+            None
+        )
 
         if matching_job:
             job_questions = matching_job.get("questions", [])
             job_options = await generate_job_attribute_options(data, job_questions)
             job_questions_with_options = job_options["suggestions"]
 
+        # Save audience type + questions in uploads
         uploads_collection = db["uploads"]
         await uploads_collection.update_one(
             {"_id": saved_cv["_id"]},
@@ -184,6 +185,7 @@ async def extract_cv(
             }}
         )
 
+    # ---------------- SUMMARY OF KNOWN & UNKNOWN FIELDS ----------------
     summary = await get_cv_summary(data)
 
     def parse_duration(duration_str: str):
@@ -192,18 +194,23 @@ async def extract_cv(
             parts = re.split(r"\s*(?:-|–|—|to)\s*", duration_str or "", flags=re.IGNORECASE)
             if len(parts) != 2:
                 return None
+
             start_str, end_str = parts[0].strip(), parts[1].strip().lower()
             start_date = date_parser.parse(start_str, fuzzy=True)
+
             if any(x in end_str for x in ("present", "current", "ongoing")):
                 end_date = datetime.today()
             else:
                 end_date = date_parser.parse(end_str, fuzzy=True)
+
             return start_date, end_date
         except Exception:
             return None
 
+    # ---------------- DETECT LATEST JOB ROLE ----------------
     job_role = None
     latest_end = datetime.min
+
     for job in data.get("WorkExperience", []) or []:
         parsed = parse_duration(job.get("Duration", ""))
         if parsed:
@@ -222,22 +229,25 @@ async def extract_cv(
         if match:
             job_role = match.group(1).strip()
 
+    # ---------------- CALCULATE KNOWN % ----------------
     known_fields = len(summary.get("known", []))
     unknown_fields = len(summary.get("unknown", []))
     total_fields = known_fields + unknown_fields
+
     known_percentage = round((known_fields / total_fields) * 100, 2) if total_fields else 0.0
 
+    # ---------------- FINAL RESPONSE ----------------
     return {
-    "parsed_data": data,
-    "summary": summary,
-    "audienceType": audience_type,
-    "candidate": {
-        "name": data.get("Name"),
-        "job_role": job_role,
-        "known_percentage": known_percentage
-    },
-    "message": "CV data extracted and saved successfully"
-}
+        "parsed_data": data,
+        "summary": summary,
+        "audienceType": audience_type,
+        "candidate": {
+            "name": data.get("Name"),
+            "job_role": job_role,
+            "known_percentage": known_percentage
+        },
+        "message": "CV data extracted and saved successfully"
+    }
 
 @router.get("/missing_questions")
 async def get_missing_field_questions(

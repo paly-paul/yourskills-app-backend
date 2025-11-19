@@ -141,162 +141,6 @@ def extract_job_role(parsed_json):
     return None
 
 
-# def extract_cv_data_from_file(filepath: str, mime_type: str):
-    
-#     prompt = """
-# You are an expert resume parser.
-
-# Given a resume file, extract structured JSON with the following fields:
-
-# {
-#   "Name": "",
-#   "DOB" : "",
-#   "Email": "",
-#   "Phone": "",
-#   "Address": "",
-#   "LinkedIn": "",
-#   "Summary": "",
-#   "Skills": {
-#     "HardSkills": [],
-#     "SoftSkills": [],
-#     "Tools": []
-#   },
-  
-#   "WorkExperience": [
-#     {
-#       "Company": "",
-#       "Role": "",
-#       "Duration": "",
-#       "Description": ""
-#     }
-#   ],
-#   "Education": [
-#     {
-#       "Degree": "",
-#       "Institution": "",
-#       "Grade": "",
-#       "Year": ""
-#     }
-#   ],
-#   "Certifications": [
-#     {
-#       "Name": "",
-#       "Issuer": "",
-#       "Year": ""
-#     }
-#   ],
-#   "Projects": [
-#     {
-#       "Title": "",
-#       "Description": ""
-#     }
-#   ],
-#   "Languages": [
-#     {
-#       "Language": "",
-#       "Proficiency": ""
-#     }
-#   ],
-#   "Awards": [
-#     {
-#       "Title": "",
-#       "Issuer": "",
-#       "Year": ""
-#     }
-#   ],
-#   "VolunteerExperience": [
-#     {
-#       "Organization": "",
-#       "Role": "",
-#       "Duration": "",
-#       "Description": ""
-#     }
-#   ],
-#   "Hobbies": [],
-#   "OtherSections": [
-#     {
-#       "Title": "",
-#       "Description": ""
-#     }
-#   ],
-#   "YearsOfExperience": 0.0
-# }
-
-# Instructions:
-# 1. Extract data **only if explicitly mentioned** in the resume text.
-# 2. Do **NOT** infer, guess, or add any information not directly written in the document.
-
-# 3. **Skills Extraction Rules:**
-#    - Only extract skills from sections explicitly labeled as:
-#      “Skills”, “Technical Skills”, “Core Competencies”, “Key Skills”, “Tech Stack”, or “Technologies”.
-#    - Categorize as follows:
-#      - **Tools** → Include all items listed under “Technical Skills”, “Tech Stack”, or similar headings.
-#        This includes programming languages, software, frameworks, platforms, and technologies.
-#        Example: Python, Java, AWS, Excel, React, Git, Figma, etc.
-#      - **HardSkills** → Only include non-tool, domain-specific, or professional capabilities explicitly listed under “Skills” or “Core Competencies”.
-#        Example: Data Analysis, Project Management, Financial Modeling, etc.
-#      - **SoftSkills** → Only include personal or interpersonal skills explicitly listed, such as Communication, Leadership, Problem Solving, etc.
-#    - Do not extract or infer skills from experience descriptions, project details, or summaries.
-#    - Record skills exactly as written (no normalization or assumption).
-#    - If a skill category is not present, leave it empty.
-
-# 4. **WorkExperience, Education, Certifications, Projects, etc.:**
-#    - Extract only explicit data.
-#    - Skip any field not mentioned.
-
-# 5. **YearsOfExperience:**
-#    - Extract only if the resume explicitly states a value (e.g., “5 years of experience”).
-#    - Do not compute or infer from job dates.
-
-# 6. Return only **valid JSON**, starting with `{` and ending with `}`.
-# 7. Do not summarize, rephrase, or infer any data.
-# 8. If any section is missing, return an empty string or empty array for that section.
-# """
-
-#     try:
-#         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-#             file_text = extract_docx_text(filepath)
-#             content_input = [file_text, prompt]
-#         else:
-#             file_bytes = pathlib.Path(filepath).read_bytes()
-#             content_input = [
-#                 {"mime_type": mime_type, "data": file_bytes},
-#                 prompt
-#             ]
-
-#         response = model.generate_content(content_input, stream=False)
-#         response_text = response.text.strip()
-
-#         if response_text.startswith("```json"):
-#             response_text = response_text[7:]
-#         if response_text.endswith("```"):
-#             response_text = response_text[:-3]
-
-#         response_text = response_text.strip()
-#         start_idx = response_text.find('{')
-#         end_idx = response_text.rfind('}')
-#         response_text = response_text[start_idx:end_idx+1]
-
-#         parsed_json = json.loads(response_text)
-#         parsed_json = clean_json(parsed_json)
-
-#         work_exp = parsed_json.get("WorkExperience", [])
-#         years_from_work = calculate_years_of_experience(work_exp)
-
-#         if years_from_work > 0:
-#             parsed_json["YearsOfExperience"] = years_from_work
-#         else:
-#             parsed_json["YearsOfExperience"] = extract_years_from_summary(parsed_json.get("Summary", ""))
-
-        
-#         parsed_json["JobRole"] = extract_job_role(parsed_json)
-
-#         return parsed_json
-
-#     except Exception as e:
-#         print("CV Extraction Error:", str(e))
-#         return {"error": "Failed to parse CV data"}
-
 def extract_cv_data_from_file(filepath: str, mime_type: str):
     
     prompt = """
@@ -789,9 +633,55 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
     - Outputs a single list of options.
     - Each option starts with a capital letter.
     """
-    results = []
-    context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
 
+    # ---- Extract the required fields ----
+    summary = cv_context.get("Summary")
+    experience = cv_context.get("Experience") or cv_context.get("WorkExperience")
+    industry = cv_context.get("Industry") or cv_context.get("IndustryDomain")
+    domain = cv_context.get("Domain")
+    technical_skills = cv_context.get("TechnicalSkills") or cv_context.get("Skills", {}).get("HardSkills")
+    soft_skills = cv_context.get("SoftSkills") or cv_context.get("Skills", {}).get("SoftSkills")
+    talent_attributes = cv_context.get("TalentAttributes") or cv_context.get("Talent Information")
+
+    # ---- DEDUPLICATION HELPER ----
+    def dedupe(value):
+        if isinstance(value, list):
+            seen = set()
+            unique = []
+            for v in value:
+                key = str(v)
+                if key not in seen:
+                    seen.add(key)
+                    unique.append(v)
+            return unique
+
+        if isinstance(value, str):
+            # Remove duplicate lines
+            lines = value.split("\n")
+            unique_lines = list(dict.fromkeys(lines))
+            return "\n".join(unique_lines)
+
+        return value  # dict or others
+
+    # ---- Build CLEAN context with NO duplicates ----
+    filtered_context = {
+        "Summary": dedupe(summary),
+        "Experience": dedupe(experience),
+        "Industry": dedupe(industry),
+        "Domain": dedupe(domain),
+        "TechnicalSkills": dedupe(technical_skills),
+        "SoftSkills": dedupe(soft_skills),
+        "TalentAttributes": dedupe(talent_attributes),
+    }
+
+    # ---- Convert filtered items into a string for LLM ----
+    context_str = "\n".join(
+        f"{k}: {v}" for k, v in filtered_context.items() if v
+    )
+
+    results = []
+
+    # ---- Audience filter ----
     audience_type = cv_context.get("audience_type") or cv_context.get("audience")
 
     if audience_type:
@@ -800,6 +690,9 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             if not q.get("audience") or q.get("audience") == audience_type
         ]
 
+    # ----------------------------------------------------
+    # PROCESS EACH QUESTION
+    # ----------------------------------------------------
     for q in questions_from_db:
         parameter = q.get("parameter", "")
         question_text = q.get("question")
@@ -812,24 +705,31 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
 
         prompt = (
-            "You are an AI assistant that generates short, relevant career-related multiple-choice options.\n\n"
-            "Each option should reflect the professional context implied by both the parameters and the question.\n"
-            "Use the information below:\n\n"
-            f"CV Context:\n{context_str}\n\n"
-            f"Question:\n{question_text}\n\n"
-            f"Parameters: {', '.join(parameter_list)}\n\n"
-            "Respond ONLY in JSON format like this:\n"
+            "Generate focused, high-quality multiple-choice options based on the user's professional background and "
+            "the intent of the question.\n\n"
+
+            "CONTEXT SUMMARY:\n"
+            f"{context_str}\n\n"
+
+            "QUESTION:\n"
+            f"{question_text}\n\n"
+
+            "PARAMETERS:\n"
+            f"{', '.join(parameter_list)}\n\n"
+
+            "OUTPUT FORMAT (STRICT JSON):\n"
             "{\n"
             "  \"options\": [\"Option 1\", \"Option 2\", ...]\n"
             "}\n\n"
-            "RULES:\n"
+
+            "REQUIREMENTS:\n"
             f"- Provide EXACTLY {option_count} options.\n"
-            "- Make options meaningful, realistic, and varied.\n"
-            "- Each option should be 2–5 words.\n"
-            "- Reflect both the question and parameters.\n"
-            "- Start each option with a capital letter.\n"
-            "- No numbers, bullets, or punctuation at the start."
+            "- Options must be short, clear (2–5 words), and directly related to the parameters and the question.\n"
+            "- Each option must start with a capital letter.\n"
+            "- No numbering, bullets, special symbols, or prefixes.\n"
+            "- Avoid generic, vague, or repetitive wording.\n"
         )
+
 
         try:
             response = await model.generate_content_async(prompt)
@@ -837,17 +737,19 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
+            # Fix formatting
             formatted_options = []
             for opt in options:
-                opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())  
+                opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())
                 if opt:
-                    opt = opt[:1].upper() + opt[1:]  
+                    opt = opt[:1].upper() + opt[1:]
                 else:
                     opt = "Option"
                 formatted_options.append(opt)
 
+            # Pad missing
             while len(formatted_options) < option_count:
-                formatted_options.append(f"Option {len(formatted_options)+1}")
+                formatted_options.append(f"Option {len(formatted_options) + 1}")
 
             result_item = {
                 "parameter": parameter_list,
@@ -872,6 +774,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             }
             if limit is not None:
                 result_item["limit"] = limit
+
             results.append(result_item)
 
     return {
@@ -968,6 +871,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 2 * len(parameter_list)  
 
+        import pdb;pdb.set_trace()
         variation_instructions = (
             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
             "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
