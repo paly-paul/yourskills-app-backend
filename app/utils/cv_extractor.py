@@ -793,13 +793,161 @@ async def get_latest_user_cv(db, user_id: str):
     return latest_cv
 
 
+# async def generate_anchor_attribute_options(user_id: str, questions, model, get_database):
+#     """
+#     Generate multiple-choice options for Anchor attributes based ONLY on:
+#     - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
+#     - Achievements (text field only)
+
+#     Each parameter contributes EXACTLY 2 options (fixed count).
+#     Saves results in the latest uploaded CV document for the user.
+#     """
+
+#     target_parameters = {
+#         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
+#         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
+#     }
+
+#     db = await get_database()
+#     latest_cv = await get_latest_user_cv(db, user_id)
+#     if not latest_cv or "parsed_data" not in latest_cv:
+#         raise HTTPException(status_code=404, detail="No CV found for this user")
+
+#     cv_id = str(latest_cv["_id"])
+
+#     cursor = db["answers"].find({
+#         "cv_id": cv_id,
+#         "section": "Anchor Attributes",
+#         "parameter": {
+#             "$in": [
+#                 "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
+#                 "Achievements"
+#             ]
+#         }
+#     })
+#     answers = await cursor.to_list(length=None)
+
+#     if not answers:
+#         raise HTTPException(status_code=404, detail="No required anchor answers found")
+
+#     base_free_text_map = {}
+#     for ans in answers:
+#         param = ans["parameter"]
+#         val = ans["value"]
+#         if isinstance(val, str):
+#             base_free_text_map[param] = val
+#         elif isinstance(val, dict) and "text" in val:
+#             base_free_text_map[param] = val["text"]
+
+#     non_empty_texts = [t for t in base_free_text_map.values() if t]
+#     random.shuffle(non_empty_texts)
+#     context_sample = "\n".join(non_empty_texts)
+
+#     style_noise_pool = [
+#         "use uncommon synonyms",
+#         "reorder ideas differently",
+#         "make phrasing more concise",
+#         "add creative wording twists",
+#         "slightly formal tone",
+#         "slightly casual tone",
+#         "shuffle activity order",
+#         "split compound ideas differently"
+#     ]
+#     random.shuffle(style_noise_pool)
+#     style_noise = ", ".join(style_noise_pool[:3])
+#     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
+
+#     suggestions = []
+
+#     for q in questions:
+#         parameter = q.get("parameter")
+#         if parameter not in target_parameters:
+#             continue
+
+#         question_text = q.get("question")
+#         type_ = q.get("type")
+#         iconfilename = q.get("iconfilename")
+
+#         parameter_list = [p.strip() for p in parameter.split("+")]
+#         option_count = 2 * len(parameter_list)  
+
+#         import pdb;pdb.set_trace()
+#         variation_instructions = (
+#             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
+#             "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
+#             "- Introduce synonyms, shuffle word order, or shorten differently.\n"
+#             "- Do NOT invent anything that is not explicitly present in the free-text answers.\n"
+#             f"- Apply these random variation rules: {style_noise}\n"
+#         )
+
+#         prompt = (
+#             "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
+#             f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
+#             f"Target parameters: {', '.join(parameter_list)}\n"
+#             f"Question: {question_text}\n\n"
+#             "Instructions:\n"
+#             f"- Generate EXACTLY {option_count} short options.\n"
+#             "- Each option must rephrase, split, or summarize the ideas from the free-text.\n"
+#             "- DO NOT invent anything not in the context.\n"
+#             "- Keep options SHORT (2–5 words).\n"
+#             "- Start each option with a CAPITAL letter.\n"
+#             "- Return plain text options only (no labels or numbers).\n"
+#             "- All options must be distinct and meaningful.\n"
+#             f"{variation_instructions}"
+#             f"- Variation key: {variation_key}\n\n"
+#             "Respond ONLY in JSON format:\n"
+#             "{\n"
+#             "  \"options\": [\"<Short phrase 1>\", \"<Short phrase 2>\", ...]\n"
+#             "}"
+#         )
+
+#         try:
+#             response = await model.generate_content_async(prompt)
+#             cleaned = clean_llm_json_response(response.text)
+#             parsed = json.loads(cleaned)
+#             options = parsed.get("options", [])
+
+#             formatted = []
+#             for opt in options[:option_count]:
+#                 cleaned_opt = opt.strip().lstrip("0123456789.- ").capitalize()
+#                 formatted.append(cleaned_opt)
+
+#             while len(formatted) < option_count:
+#                 formatted.append(f"Option {len(formatted)+1}")
+
+#             suggestions.append({
+#                 "parameter": parameter_list,
+#                 "question": question_text,
+#                 "type": type_,
+#                 "iconfilename": iconfilename,
+#                 "options": formatted
+#             })
+
+#         except Exception as e:
+#             suggestions.append({
+#                 "parameter": parameter_list,
+#                 "question": question_text,
+#                 "type": type_,
+#                 "iconfilename": iconfilename,
+#                 "options": [f"Option {i+1}" for i in range(option_count)],
+#                 "error": str(e)
+#             })
+
+#     await db["uploads"].update_one(
+#         {"_id": latest_cv["_id"]},
+#         {"$set": {"anchor_questions_with_options": suggestions}}
+#     )
+
+#     return {"success": True, "suggestions": suggestions}
+
 async def generate_anchor_attribute_options(user_id: str, questions, model, get_database):
     """
-    Generate multiple-choice options for Anchor attributes based ONLY on:
+    Generate multiple-choice options for Anchor attributes based on:
     - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
-    - Achievements (text field only)
+    - Achievements
+    - PLUS resume context: Summary + Experience text + Education text
 
-    Each parameter contributes EXACTLY 2 options (fixed count).
+    Each parameter contributes EXACTLY 2 options.
     Saves results in the latest uploaded CV document for the user.
     """
 
@@ -809,12 +957,15 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     }
 
     db = await get_database()
+
+    # ---- Get latest CV upload ----
     latest_cv = await get_latest_user_cv(db, user_id)
     if not latest_cv or "parsed_data" not in latest_cv:
         raise HTTPException(status_code=404, detail="No CV found for this user")
 
     cv_id = str(latest_cv["_id"])
 
+    # ---- Fetch only required anchor answers ----
     cursor = db["answers"].find({
         "cv_id": cv_id,
         "section": "Anchor Attributes",
@@ -825,11 +976,12 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             ]
         }
     })
-    answers = await cursor.to_list(length=None)
 
+    answers = await cursor.to_list(length=None)
     if not answers:
         raise HTTPException(status_code=404, detail="No required anchor answers found")
 
+    # ---- Extract free text for anchor parameters ----
     base_free_text_map = {}
     for ans in answers:
         param = ans["parameter"]
@@ -843,6 +995,44 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     random.shuffle(non_empty_texts)
     context_sample = "\n".join(non_empty_texts)
 
+    # ----------------------------------------------------------
+    # 📌 ADD RESUME TEXT FROM UPLOADS → Summary, Experience, Education
+    # ----------------------------------------------------------
+    parsed = latest_cv.get("parsed_data", {})
+
+    # Summary
+    summary_text = parsed.get("Summary") or ""
+
+    # Experience text (joining all descriptions)
+    experience_text = ""
+    work_exp = parsed.get("WorkExperience") or []
+    if isinstance(work_exp, list):
+        experience_text = "\n".join([
+            w.get("Description", "") for w in work_exp if w.get("Description")
+        ])
+
+    # Education text
+    education_text = ""
+    edu_list = parsed.get("Education") or []
+    if isinstance(edu_list, list):
+        education_text = "\n".join([
+            f"{e.get('Degree', '')} {e.get('College', '')} {e.get('Year', '')}".strip()
+            for e in edu_list
+            if e.get('Degree') or e.get('College') or e.get('Year')
+        ])
+
+    # Merge context + resume fields
+    extra_resume_context = "\n".join([
+        summary_text,
+        experience_text,
+        education_text
+    ]).strip()
+
+    combined_context = (context_sample + "\n" + extra_resume_context).strip()
+
+    # ----------------------------------------------------------
+    # RANDOM NOISE + VARIATION KEY
+    # ----------------------------------------------------------
     style_noise_pool = [
         "use uncommon synonyms",
         "reorder ideas differently",
@@ -859,6 +1049,9 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
 
     suggestions = []
 
+    # ----------------------------------------------------------
+    # LOOP OVER QUESTIONS
+    # ----------------------------------------------------------
     for q in questions:
         parameter = q.get("parameter")
         if parameter not in target_parameters:
@@ -869,30 +1062,33 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         iconfilename = q.get("iconfilename")
 
         parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = 2 * len(parameter_list)  
 
-        import pdb;pdb.set_trace()
+        # Each param → 2 options
+        option_count = 2 * len(parameter_list)
+
         variation_instructions = (
-            "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
-            "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
-            "- Introduce synonyms, shuffle word order, or shorten differently.\n"
-            "- Do NOT invent anything that is not explicitly present in the free-text answers.\n"
-            f"- Apply these random variation rules: {style_noise}\n"
+            "- Ensure each execution produces DIFFERENT wording.\n"
+            "- Randomly split, merge, or rephrase phrases from context.\n"
+            "- Introduce synonyms or shuffle words.\n"
+            "- Do NOT invent anything not present in the context.\n"
+            f"- Apply variation rules: {style_noise}\n"
         )
 
+        # ------------------------------------------------------
+        # FINAL PROMPT (INCLUDES RESUME DATA)
+        # ------------------------------------------------------
         prompt = (
             "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
-            f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
+            f"STRICT KNOWLEDGE BASE (use ONLY this content, no invention):\n{combined_context}\n\n"
             f"Target parameters: {', '.join(parameter_list)}\n"
             f"Question: {question_text}\n\n"
             "Instructions:\n"
-            f"- Generate EXACTLY {option_count} short options.\n"
-            "- Each option must rephrase, split, or summarize the ideas from the free-text.\n"
-            "- DO NOT invent anything not in the context.\n"
+            f"- Generate EXACTLY {option_count} options.\n"
+            "- Each option must rephrase or summarize ideas from the context.\n"
             "- Keep options SHORT (2–5 words).\n"
             "- Start each option with a CAPITAL letter.\n"
-            "- Return plain text options only (no labels or numbers).\n"
-            "- All options must be distinct and meaningful.\n"
+            "- No numbers, bullets, or labels.\n"
+            "- All options must be distinct.\n"
             f"{variation_instructions}"
             f"- Variation key: {variation_key}\n\n"
             "Respond ONLY in JSON format:\n"
@@ -901,17 +1097,21 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             "}"
         )
 
+        # ------------------------------------------------------
+        # CALL LLM
+        # ------------------------------------------------------
         try:
             response = await model.generate_content_async(prompt)
             cleaned = clean_llm_json_response(response.text)
-            parsed = json.loads(cleaned)
-            options = parsed.get("options", [])
+            parsed_json = json.loads(cleaned)
+            options = parsed_json.get("options", [])
 
             formatted = []
             for opt in options[:option_count]:
                 cleaned_opt = opt.strip().lstrip("0123456789.- ").capitalize()
                 formatted.append(cleaned_opt)
 
+            # Pad if fewer options returned
             while len(formatted) < option_count:
                 formatted.append(f"Option {len(formatted)+1}")
 
@@ -924,6 +1124,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             })
 
         except Exception as e:
+            # Fallback options
             suggestions.append({
                 "parameter": parameter_list,
                 "question": question_text,
@@ -933,12 +1134,16 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
                 "error": str(e)
             })
 
+    # ----------------------------------------------------------
+    # SAVE RESULTS IN UPLOADS COLLECTION
+    # ----------------------------------------------------------
     await db["uploads"].update_one(
         {"_id": latest_cv["_id"]},
         {"$set": {"anchor_questions_with_options": suggestions}}
     )
 
     return {"success": True, "suggestions": suggestions}
+
 
 #--------------Second Flow--------------
 
