@@ -300,14 +300,59 @@ def extract_job_role(parsed_json):
 def extract_cv_data_from_file(filepath: str, mime_type: str):
     
     prompt = """
-You are an expert AI Resume Parser and Career Analyst.
+You are a Senior HR Recruitment, Talent Analyst, and Skill Intelligence Expert trained to extract accurate structured information from resumes, profiles, or people data.
 
-Given a resume file, extract and return a **single structured JSON** with **all personal, professional, and analytical details**.
+Your task:
+Read the documents/data and return a CLEAN, VALID JSON object following the exact schema below.
+Use your skill analytics and HR experience to extract and interpret information correctly.
+Do NOT delete, modify, rename, or reorder existing keys.
+You may ONLY add the additional keys provided at the bottom.
+If information is missing, return "Not specified".
+Return ONLY valid JSON. No commentary, no markdown, no explanations.
 
-Return only valid JSON (no commentary, no markdown).  
-If any section is missing, leave it empty or "Not specified".
+IMPORTANT RULE:
 
-Schema:
+If these 3 elements are missing → you MUST auto-fill them using intelligent HR interpretation based on resume context:
+
+1. Technical Skills (inside Talent Information)
+2. Soft Skills (inside Talent Information)
+3. Certifications (inside Talent Information → the Certifications array only)
+
+If they already exist, keep them exactly as provided. 
+Do NOT auto-fill anything else.
+
+ADDITIONAL LLM-GENERATION RULE (STRICT):
+
+EMPTY means: "", null, whitespace, empty array, or arrays containing only empty values 
+(e.g., [{ "Name": "", "Issuer": "", "Year": "" }]).
+
+- If Technical Skills is EMPTY → DO NOT fill the original Technical Skills field. 
+  Instead, fill ONLY "LLM_Generated_Technical_Skills".
+
+- If Soft Skills is EMPTY → DO NOT fill the original Soft Skills field. 
+  Instead, fill ONLY "LLM_Generated_Soft_Skills".
+
+- If Certifications is EMPTY → DO NOT fill the original Certification fields. 
+  Instead, fill ONLY "LLM_Generated_Certificates".
+
+CERTIFICATION RULE (STRICT AND OVERRIDING):
+- If the resume contains ANY certifications at the top level OR inside Talent Information 
+  (even partial or incomplete):
+    → Keep all original certification values exactly as they appear.
+
+
+- If the resume contains NO certifications anywhere 
+  (empty array [], empty objects, "", null, or only blank fields):
+    → Do NOT fill the original Certification fields.
+    → "LLM_Generated_Certificates" MUST be generated with realistic, context-appropriate certifications.
+    → "LLM_Generated_Certificates" MUST NOT be empty when original certifications are missing.
+
+
+- Under NO condition should both the original Certifications AND LLM_Generated_Certificates be filled at the same time.
+
+------------------------------------------------------------
+JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
+------------------------------------------------------------
 
 {
   "Name": "",
@@ -343,6 +388,12 @@ Schema:
       "Name": "",
       "Issuer": "",
       "Year": ""
+    }
+  ],
+   "Interships": [
+    {
+      "Title": "",
+      "Description": ""
     }
   ],
   "Projects": [
@@ -403,13 +454,14 @@ Schema:
       }
     ],
     "Salary grades": "",
-    "Career Objective": ""
+    "Career Objective": "",
+        "Career Interest Areas": "",
   },
+
   "Anchor Attributes": {
     "Achievements": "",
     "Behavioral Skills": "",
     "Interests": "",
-    "Career Interest Areas": "",
     "Competency": "",
     "Cognitive Preferences": "",
     "Creative Inclinations": "",
@@ -429,23 +481,95 @@ Schema:
     "Volunteering": "",
     "Personality Traits": ""
   },
+
   "Know about yourself": {
     "Inferred Persona Insights": "",
-    "Career stage category": "Based on extracted experience years and gaps classify into: Student, Early Professional, Mid Career Pivot, Job Seeker"
-  }
+    "Career stage category": ""
+  },
+
+  "IndustryDomain": "",
+  "ProfileSnapshot": "",
+  "ExperienceLevel": "",
+
+  "LLM_Generated_Certificates": [],
+  "LLM_Generated_Technical_Skills": [],
+  "LLM_Generated_Soft_Skills": []
 }
 
-Rules:
-1. Extract only explicitly mentioned information from the resume.
-2. Categorize skills as:
-   - Tools → programming languages, software, frameworks, technologies.
-   - HardSkills → domain or professional competencies.
-   - SoftSkills → interpersonal/personal traits.
-3. Never infer or guess missing values — use "Not specified" if unavailable.
-4. Keep arrays for WorkExperience, Education, Projects, etc.
-5. For YearsOfExperience, extract only if explicitly mentioned; do not infer.
-6. Respond only with valid JSON — starting with `{` and ending with `}`.
-7. Provide **augmented information** — inferred job level, personality traits, career potential, etc.
+------------------------------------------------------------
+INSTRUCTION RULES (APPLY TO ALL FIELDS)
+------------------------------------------------------------
+
+SUMMARY:
+The "Summary" must be a powerful 2–3 line high-level snapshot capturing:
+– Role/domain identity  
+– Key skills (technical or soft)  
+– Highest education or academic background  
+– Industry Domain (IT, Finance, Healthcare, HR, EdTech, etc.)  
+Use ONLY resume evidence. No assumptions.
+
+SKILLS:
+Tools → programming languages, frameworks, cloud tools, software, platforms  
+HardSkills → technical, domain, analytical, operational skills  
+SoftSkills → behavioural, communication, leadership, interpersonal skills  
+
+EXPERIENCE:
+YearsOfExperience is used ONLY if explicitly mentioned.
+You MAY calculate or infer from dates and timelines if clearly provided.
+
+INDUSTRY DOMAIN:
+Extract domain if explicitly mentioned or clearly implied.
+Examples: IT, HR, Sales, Marketing, Operations, Healthcare, Finance, EdTech.
+If unclear → “Not specified”.
+
+PROFILE SNAPSHOT:
+A short 1-line mini-summary of role + experience + key skill.
+
+EXPERIENCE LEVEL:
+Choose ONLY from actual job roles, job titles, leadership positions, or responsibilities.
+Allowed values:
+“Fresher”,  
+“Junior”,  
+“Mid-Level”,  
+“Senior”,  
+“Lead”,  
+“Manager”,  
+“Senior Manager”,  
+“Director”,  
+“Senior Director”,  
+“Vice President”,  
+“Senior Vice President”,  
+“C-Level Executive”,  
+“Founder / Co-Founder”,  
+“Head / Department Head”,  
+“Not specified”
+
+PERSONA INSIGHTS:
+Interpret strengths, behaviour traits, and working style ONLY from resume evidence.
+
+CAREER STAGE CATEGORY:
+One of:
+“Student”, “Early Professional”, “Mid Career Pivot”, “Job Seeker”.
+
+------------------------------------------------------------
+FINAL RULES
+------------------------------------------------------------
+– Output MUST be valid JSON.  
+– Start with “{” and end with “}”.  
+– No explanation, no markdown, no extra text.  
+– Never hallucinate factual data.  
+– Only auto-fill Technical Skills, Soft Skills, and Certifications inside Talent Information if missing.
+– If empty, DO NOT fill the original fields.
+– Instead fill ONLY:
+    "LLM_Generated_Technical_Skills",
+    "LLM_Generated_Soft_Skills",
+    "LLM_Generated_Certificates".
+– If any certifications exist in the resume → LLM_Generated_Certificates MUST be empty.
+– If no certifications exist → LLM_Generated_Certificates MUST be generated.
+– Infer ONLY in Persona Insights, not in structured fields.
+
+
+
 """
 
     try:
