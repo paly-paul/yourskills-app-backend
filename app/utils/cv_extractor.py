@@ -350,9 +350,20 @@ The "Summary" must be a powerful 2–3 line high-level snapshot capturing:
 – Role/domain identity  
 – Key skills (technical or soft)  
 – Highest education or academic background  
-– One appropriate Domain (IT, Finance, Healthcare, HR, EdTech, Backend Engineering, Cloud Engineering, Data Science, DevOps, Cybersecurity, Product Management, AI/ML, HR Digital Transformation, Talent Management, etc.)
-– One appropriate Industry (Information Technology, SaaS, FinTech, HealthTech, HR Tech, EdTech, Retail, BFSI, Consulting, Manufacturing, Telecom, AI/ML, Enterprise Software, E-commerce, etc.)
-Use ONLY resume evidence. No assumptions.
+– Only One appropriate **Industry–Domain pairing**, chosen **ONLY one domain and industry** from resume evidence and based on the examples below:
+
+    • Industry - Financial Services  
+      Domain - Retail Banking, Mortgage Processing, Fraud Detection  
+
+    • Industry - Healthcare  
+      Domain - Patient Scheduling, Clinical Documentation, Medical Billing & Claims  
+
+    • Industry - E-commerce / Retail  
+      Domain - Inventory Management, Logistics & Fulfillment  
+
+    • Industry - Telecommunications  
+      Domain - Billing and Invoicing, Network Provisioning, Customer Relationship Management  
+
 
 SKILLS:
 Tools → programming languages, frameworks, cloud tools, software, platforms  
