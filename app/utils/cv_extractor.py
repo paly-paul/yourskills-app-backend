@@ -1077,6 +1077,13 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         # ------------------------------------------------------
         prompt = (
             "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
+            "Generate options inspired by the user’s Personal Interests, Hobbies, Exploration Interests, "
+            "Motivation Drivers, Motivating Activities, and Achievements—without directly copying their context. "
+            "Infer the user’s underlying nature (e.g., creative, organized, exploratory) and tailor the options "
+            "to reflect that. Ensure the options remain relevant to the user’s job title and aligned with their "
+            "inferred personality and interests.\n\n"
+            "Also generate options based on the content of the question, ensuring they introduce new elements "
+            "that are not already included in the resume/CV but relatable to the job title.\n\n"
             f"STRICT KNOWLEDGE BASE (use ONLY this content, no invention):\n{combined_context}\n\n"
             f"Target parameters: {', '.join(parameter_list)}\n"
             f"Question: {question_text}\n\n"
@@ -1092,8 +1099,9 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             "Respond ONLY in JSON format:\n"
             "{\n"
             "  \"options\": [\"<Short phrase 1>\", \"<Short phrase 2>\", ...]\n"
-            "}"
+            "}\n"
         )
+
 
         # ------------------------------------------------------
         # CALL LLM
