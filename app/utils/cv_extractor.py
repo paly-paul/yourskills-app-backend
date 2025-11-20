@@ -707,21 +707,18 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         prompt = (
             "Generate focused, high-quality multiple-choice options based on the user's professional background and "
             "the intent of the question.\n\n"
-
+            "Generate options based on the content of the question, ensuring they introduce new elements not already "
+            "included in the resume/CV but relatable to the job title.\n\n"
             "CONTEXT SUMMARY:\n"
             f"{context_str}\n\n"
-
             "QUESTION:\n"
             f"{question_text}\n\n"
-
             "PARAMETERS:\n"
             f"{', '.join(parameter_list)}\n\n"
-
             "OUTPUT FORMAT (STRICT JSON):\n"
             "{\n"
             "  \"options\": [\"Option 1\", \"Option 2\", ...]\n"
             "}\n\n"
-
             "REQUIREMENTS:\n"
             f"- Provide EXACTLY {option_count} options.\n"
             "- Options must be short, clear (2–5 words), and directly related to the parameters and the question.\n"
@@ -729,6 +726,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             "- No numbering, bullets, special symbols, or prefixes.\n"
             "- Avoid generic, vague, or repetitive wording.\n"
         )
+
 
 
         try:
