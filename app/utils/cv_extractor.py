@@ -331,7 +331,8 @@ JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
     "Career stage category": ""
   },
 
-  "IndustryDomain": "",
+  "Domain": "",
+  "Industry":"",
   "ProfileSnapshot": "",
   "ExperienceLevel": "",
 
@@ -349,7 +350,8 @@ The "Summary" must be a powerful 2–3 line high-level snapshot capturing:
 – Role/domain identity  
 – Key skills (technical or soft)  
 – Highest education or academic background  
-– Industry Domain (IT, Finance, Healthcare, HR, EdTech, etc.)  
+– One appropriate Domain (IT, Finance, Healthcare, HR, EdTech, Backend Engineering, Cloud Engineering, Data Science, DevOps, Cybersecurity, Product Management, AI/ML, HR Digital Transformation, Talent Management, etc.)
+– One appropriate Industry (Information Technology, SaaS, FinTech, HealthTech, HR Tech, EdTech, Retail, BFSI, Consulting, Manufacturing, Telecom, AI/ML, Enterprise Software, E-commerce, etc.)
 Use ONLY resume evidence. No assumptions.
 
 SKILLS:
