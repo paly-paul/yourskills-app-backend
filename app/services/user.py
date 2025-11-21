@@ -151,7 +151,7 @@ async def save_latest_cv_answers(db, current_user: dict, section: str, answers: 
     if answer_docs:
         await db["answers"].insert_many(answer_docs)
 
-    return {"message": "Answers saved successfully", "cv_id": cv_id}
+    return {"message": "Answers saved successfully", "doc_id": cv_id}
 
 
 
