@@ -21,6 +21,7 @@ from bson import ObjectId
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
+print(os.getenv("GEMINI_API_KEY"))
 
 def parse_duration(duration_str):
     try:
@@ -141,6 +142,344 @@ def extract_job_role(parsed_json):
     return None
 
 
+# def extract_cv_data_from_file(filepath: str, mime_type: str):
+    
+#     prompt = """
+# You are a Senior HR Recruitment, Talent Analyst, and Skill Intelligence Expert trained to extract accurate structured information from resumes, profiles, or people data.
+
+# Your task:
+# Read the documents/data and return a CLEAN, VALID JSON object following the exact schema below.
+# Use your skill analytics and HR experience to extract and interpret information correctly.
+# Do NOT delete, modify, rename, or reorder existing keys.
+# You may ONLY add the additional keys provided at the bottom.
+# If information is missing, return "Not specified".
+# Return ONLY valid JSON. No commentary, no markdown, no explanations.
+
+
+# ------------------------------------------------------------
+# CRITICAL OVERRIDES (STRONG RULES YOU MUST FOLLOW)
+# ------------------------------------------------------------
+
+# 1. INDUSTRY RULE (STRICT)
+#    - You MUST return exactly ONE ** Industry**, even if the resume mentions multiple.
+#    - Choose the MOST RECENT logical industry based on last 1–2 job roles.
+#    - Examples:
+#         If last job is at Lowe’s → Industry = "Retail"
+#         If last job is Diageo → Industry = "Beverage / FMCG"
+#         If last job is in IT consulting → Industry = "Information Technology Services"
+#         - Retail  
+#         - FMCG  
+#         - Consulting  
+#         - Insurance  
+#         - IT Services  
+#         - Telecommunications  
+
+# 2. DOMAIN RULE (STRICT)
+#    - You MUST return exactly ONE ** Domain**.
+#    - Domain = functional expertise (HRBP, L&D, DEI, Program Management, etc.)
+#    - Choose the MOST dominant domain based on:
+#         - 70% of responsibilities across roles
+#         - Skills & certifications
+#    - Example: "Leadership & Organizational Development",“Human Resources – L&D & Organizational Development”, “HR Business Partnering”, “DEI & Culture Transformation” ,“Program Management Office (PMO)”  
+#    - DO NOT produce multiple domains.
+
+# 3. TECHNICAL SKILL LIMIT (VERY STRICT)
+#    - Output ONLY the **top 10 relevant technical/hard skills**.
+#    - If more than 10 appear → select the 10 MOST RELEVANT for the job role.
+
+# 4. SKILL LIMITS (STRICT)
+#    • HardSkills → MAX 10  
+#    • SoftSkills → MAX 5  
+#    • Tools → unlimited but keep only relevant tools  
+#    • Remove duplicates (e.g., “Machine Learning” vs “ML” → keep standard term)
+#    • Choose most relevant skills (based on last roles + responsibilities)
+   
+# 5. CERTIFICATION RULES (ALREADY EXISTING)
+#    - If certifications exist → keep them unchanged.
+#    - If missing → generate exactly 3 realistic certifications in LLM_Generated_Certificates only.
+#    - NEVER auto-fill original Certification fields when empty.
+
+# 6. AUTO-FILL RULE (STRICT)
+#    Auto-fill ONLY if the corresponding field is EMPTY:
+#       • Technical Skills → fill ONLY "LLM_Generated_Technical_Skills"
+#       • Soft Skills → fill ONLY "LLM_Generated_Soft_Skills"
+#       • Certifications → fill ONLY "LLM_Generated_Certificates"
+      
+# 7. EMPTY means: "", null, whitespace, empty array, or arrays containing only empty values.
+
+
+# ------------------------------------------------------------
+# INSTRUCTION RULES (APPLY TO ALL FIELDS)
+# ------------------------------------------------------------
+# SUMMARY:
+# The "Summary" must be a powerful 2–3 line high-level snapshot capturing:
+# – Role/domain identity  
+# – Key skills (technical or soft)  
+# – Highest education or academic background  
+# – Only One appropriate **Industry–Domain pairing**, chosen **ONLY one domain and industry** from resume evidence and based on the examples below:
+
+#     • Industry - Financial Services  
+#       Domain - Retail Banking, Mortgage Processing, Fraud Detection  
+
+#     • Industry - Healthcare  
+#       Domain - Patient Scheduling, Clinical Documentation, Medical Billing & Claims  
+
+#     • Industry - E-commerce / Retail  
+#       Domain - Inventory Management, Logistics & Fulfillment  
+
+#     • Industry - Telecommunications  
+#       Domain - Billing and Invoicing, Network Provisioning, Customer Relationship Management  
+
+
+# SKILLS:
+# Tools → programming languages, frameworks, cloud tools, software, platforms  
+# HardSkills → technical, domain, analytical, operational skills  
+# SoftSkills → behavioural, communication, leadership, interpersonal skills  
+
+# EXPERIENCE:
+# YearsOfExperience is used ONLY if explicitly mentioned.
+# You MAY calculate or infer from dates and timelines if clearly provided.
+
+# PROFILE SNAPSHOT:
+# A short 1-line mini-summary of role + experience + key skill.
+
+# EXPERIENCE LEVEL:
+# Choose ONLY from actual job roles, job titles, leadership positions, or responsibilities.
+# Allowed values:
+# “Fresher”,  
+# “Junior”,  
+# “Mid-Level”,  
+# “Senior”,  
+# “Lead”,  
+# “Manager”,  
+# “Senior Manager”,  
+# “Director”,  
+# “Senior Director”,  
+# “Vice President”,  
+# “Senior Vice President”,  
+# “C-Level Executive”,  
+# “Founder / Co-Founder”,  
+# “Head / Department Head”,  
+# “Not specified”
+
+# PERSONA INSIGHTS:
+# Interpret strengths, behaviour traits, and working style ONLY from resume evidence.
+
+# CAREER STAGE CATEGORY:
+# One of:
+# “Student”, “Early Professional”, “Mid Career Pivot”, “Job Seeker”.
+# ------------------------------------------------------------
+# JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
+# ------------------------------------------------------------
+
+# {
+#   "Name": "",
+#   "DOB": "",
+#   "Email": "",
+#   "Phone": "",
+#   "Address": "",
+#   "LinkedIn": "",
+#   "Summary": "",
+#   "Skills": {
+#     "HardSkills": [],
+#     "SoftSkills": [],
+#     "Tools": []
+#   },
+#   "WorkExperience": [
+#     {
+#       "Company": "",
+#       "Role": "",
+#       "Duration": "",
+#       "Description": ""
+#     }
+#   ],
+#   "Education": [
+#     {
+#       "Degree": "",
+#       "Institution": "",
+#       "Grade": "",
+#       "Year": ""
+#     }
+#   ],
+#   "Certifications": [
+#     {
+#       "Name": "",
+#       "Issuer": "",
+#       "Year": ""
+#     }
+#   ],
+#    "Interships": [
+#     {
+#       "Title": "",
+#       "Description": ""
+#     }
+#   ],
+#   "Projects": [
+#     {
+#       "Title": "",
+#       "Description": ""
+#     }
+#   ],
+#   "Languages": [
+#     {
+#       "Language": "",
+#       "Proficiency": ""
+#     }
+#   ],
+#   "Awards": [
+#     {
+#       "Title": "",
+#       "Issuer": "",
+#       "Year": ""
+#     }
+#   ],
+#   "VolunteerExperience": [
+#     {
+#       "Organization": "",
+#       "Role": "",
+#       "Duration": "",
+#       "Description": ""
+#     }
+#   ],
+#   "Hobbies": [],
+#   "OtherSections": [
+#     {
+#       "Title": "",
+#       "Description": ""
+#     }
+#   ],
+#   "YearsOfExperience": 0.0,
+
+#   "Talent Information": {
+#     "Core Tasks": "",
+#     "Supplementary Tasks": "",
+#     "Emerging Tasks": "",
+#     "Knowledge": "",
+#     "Skills": "",
+#     "Abilities": "",
+#     "Work activities": "",
+#     "Work styles": "",
+#     "Work values": "",
+#     "Technical Skills": "",
+#     "Hot Technologies": "",
+#     "Soft Skills": "",
+#     "Functional Skills": "",
+#     "Certifications": [
+#       {
+#         "Name": "",
+#         "Provider": "",
+#         "Year": ""
+#       }
+#     ],
+#     "Salary grades": "",
+#     "Career Objective": "",
+#         "Career Interest Areas": "",
+#   },
+
+#   "Anchor Attributes": {
+#     "Achievements": "",
+#     "Behavioral Skills": "",
+#     "Interests": "",
+#     "Competency": "",
+#     "Cognitive Preferences": "",
+#     "Creative Inclinations": "",
+#     "Exploration Interest": "",
+#     "Future study intent": "",
+#     "Cultural Exposure": "",
+#     "Emerging Tech Awareness": "",
+#     "Hobbies": "",
+#     "Learning Agility": "",
+#     "Life Skills": "",
+#     "Motivation Drivers": "",
+#     "Motivating Activities": "",
+#     "Newly Acquired Skills": "",
+#     "Organizational Skills": "",
+#     "Personal Interests": "",
+#     "Social Causes": "",
+#     "Volunteering": "",
+#     "Personality Traits": ""
+#   },
+
+#   "Know about yourself": {
+#     "Inferred Persona Insights": "",
+#     "Career stage category": ""
+#   },
+
+#   "Domain": "",
+#   "Industry":"",
+#   "ProfileSnapshot": "",
+#   "ExperienceLevel": "",
+
+#   "LLM_Generated_Certificates": [],
+#   "LLM_Generated_Technical_Skills": [],
+#   "LLM_Generated_Soft_Skills": []
+# }
+
+# ------------------------------------------------------------
+# FINAL RULES
+# ------------------------------------------------------------
+# – Output MUST be valid JSON.  
+# – Start with “{” and end with “}”.  
+# – No explanation, no markdown, no extra text.  
+# – Never hallucinate factual data.  
+# – Only auto-fill Technical Skills, Soft Skills, and Certifications inside Talent Information if missing.
+# – Respect top-skill limits  
+# – If empty, DO NOT fill the original fields.
+# – Instead fill ONLY:
+#     "LLM_Generated_Technical_Skills",
+#     "LLM_Generated_Soft_Skills",
+#     "LLM_Generated_Certificates".
+# – If any certifications exist in the resume → LLM_Generated_Certificates MUST be empty.
+# – If no certifications exist → LLM_Generated_Certificates MUST be generated.
+# – Infer ONLY in Persona Insights, not in structured fields.
+# – Keep domain & industry specific and evidence-based
+
+# """
+
+#     try:
+#         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+#             file_text = extract_docx_text(filepath)
+#             content_input = [file_text, prompt]
+#         else:
+#             file_bytes = pathlib.Path(filepath).read_bytes()
+#             content_input = [
+#                 {"mime_type": mime_type, "data": file_bytes},
+#                 prompt
+#             ]
+
+#         response = model.generate_content(content_input, stream=False)
+#         response_text = response.text.strip()
+
+#         if response_text.startswith("```json"):
+#             response_text = response_text[7:]
+#         if response_text.endswith("```"):
+#             response_text = response_text[:-3]
+
+#         response_text = response_text.strip()
+#         start_idx = response_text.find('{')
+#         end_idx = response_text.rfind('}')
+#         response_text = response_text[start_idx:end_idx+1]
+
+#         parsed_json = json.loads(response_text)
+#         parsed_json = clean_json(parsed_json)
+
+#         work_exp = parsed_json.get("WorkExperience", [])
+#         years_from_work = calculate_years_of_experience(work_exp)
+
+#         if years_from_work > 0:
+#             parsed_json["YearsOfExperience"] = years_from_work
+#         else:
+#             parsed_json["YearsOfExperience"] = extract_years_from_summary(parsed_json.get("Summary", ""))
+
+#         parsed_json["JobRole"] = extract_job_role(parsed_json)
+
+#         return parsed_json
+
+#     except Exception as e:
+#         print("CV Extraction Error:", str(e))
+#         return {"error": "Failed to parse CV data"}
+
+
 def extract_cv_data_from_file(filepath: str, mime_type: str):
     
     prompt = """
@@ -148,52 +487,92 @@ You are a Senior HR Recruitment, Talent Analyst, and Skill Intelligence Expert t
 
 Your task:
 Read the documents/data and return a CLEAN, VALID JSON object following the exact schema below.
-Use your skill analytics and HR experience to extract and interpret information correctly.
+Use your HR experience to extract and interpret information correctly.
 Do NOT delete, modify, rename, or reorder existing keys.
 You may ONLY add the additional keys provided at the bottom.
 If information is missing, return "Not specified".
 Return ONLY valid JSON. No commentary, no markdown, no explanations.
 
-IMPORTANT RULE:
+------------------------------------------------------------
+CRITICAL OVERRIDES (STRICT)
+------------------------------------------------------------
+1. INDUSTRY RULE (STRICT)
+   - You MUST return exactly ONE ** Industry**, even if the resume mentions multiple.
+   - Choose the MOST RECENT logical industry based on last 1–2 job roles.
+   - Examples:
+        If last job is at Lowe’s → Industry = "Retail"
+        If last job is Diageo → Industry = "Beverage / FMCG"
+        If last job is in IT consulting → Industry = "Information Technology Services"
+        - Retail  
+        - FMCG  
+        - Consulting  
+        - Insurance  
+        - IT Services  
+        - Telecommunications  
+        
+2. DOMAIN (MUST BE EXACTLY ONE)
+• Domain = primary functional expertise (HRBP, L&D, DEI, PMO, etc.).
+• Select ONE domain based on:
+    – 70%+ responsibilities across roles
+    – Skills and certifications
+• Examples: “Leadership & Organizational Development”, “HR Business Partnering”, “DEI & Culture Transformation”, “Program Management Office (PMO)”.
 
-If these 3 elements are missing → you MUST auto-fill them using intelligent HR interpretation based on resume context:
+3. SKILL LIMITS (VERY STRICT)
+• HardSkills → MAX 10  
+• SoftSkills → MAX 5  
+• Tools → unlimited but relevant only  
+• Remove duplicates (standardize names)  
+• Choose skills most relevant to the latest 1–2 roles.
 
-1. Technical Skills (inside Talent Information)
-2. Soft Skills (inside Talent Information)
-3. Certifications (inside Talent Information → the Certifications array only)
+4. CERTIFICATION RULES
+• If certifications exist → keep EXACTLY as they appear.
+• If NO certifications → generate EXACTLY 3 realistic ones ONLY inside:
+      "LLM_Generated_Certificates"
+• NEVER fill original Certification fields when empty.
 
-If they already exist, keep them exactly as provided. 
-Do NOT auto-fill anything else.
+5. AUTO-FILL RULE (STRICT)
+Auto-fill ONLY if original field is EMPTY:
+• Technical Skills → fill ONLY "LLM_Generated_Technical_Skills"
+• Soft Skills     → fill ONLY "LLM_Generated_Soft_Skills"
+• Certifications  → fill ONLY "LLM_Generated_Certificates"
 
-ADDITIONAL LLM-GENERATION RULE (STRICT):
+6. EMPTY DEFINITION
+EMPTY = "", null, whitespace, empty list, or list of empty objects.
 
-EMPTY means: "", null, whitespace, empty array, or arrays containing only empty values 
-(e.g., [{ "Name": "", "Issuer": "", "Year": "" }]).
+------------------------------------------------------------
+INSTRUCTION RULES (APPLY TO ALL FIELDS)
+------------------------------------------------------------
 
-- If Technical Skills is EMPTY → DO NOT fill the original Technical Skills field. 
-  Instead, fill ONLY "LLM_Generated_Technical_Skills".
+SUMMARY (2–3 lines)
+Must include:
+• Role/domain identity  
+• Key technical or soft skills  
+• Highest relevant education  
+• ONE Domain + ONE Industry  
 
-- If Soft Skills is EMPTY → DO NOT fill the original Soft Skills field. 
-  Instead, fill ONLY "LLM_Generated_Soft_Skills".
+SKILLS CLASSIFICATION
+• Tools = platforms, software, cloud tools  
+• HardSkills = technical or domain skills  
+• SoftSkills = behavioural and communication skills  
 
-- If Certifications is EMPTY → DO NOT fill the original Certification fields. 
-  Instead, fill ONLY "LLM_Generated_Certificates".
+EXPERIENCE
+YearsOfExperience may be calculated if dates are clearly provided.
 
-CERTIFICATION RULE (STRICT AND OVERRIDING):
-- If the resume contains ANY certifications at the top level OR inside Talent Information 
-  (even partial or incomplete):
-    → Keep all original certification values exactly as they appear.
+PROFILE SNAPSHOT
+One strong line summarizing role + experience + core capability.
 
+EXPERIENCE LEVEL
+Allowed values:
+“Fresher”, “Junior”, “Mid-Level”, “Senior”, “Lead”, “Manager”,  
+“Senior Manager”, “Director”, “Senior Director”, “Vice President”,  
+“Senior Vice President”, “C-Level Executive”,  
+“Head / Department Head”, “Founder / Co-Founder”, “Not specified”.
 
-- If the resume contains NO certifications anywhere 
-  (empty array [], empty objects, "", null, or only blank fields):
-    → Do NOT fill the original Certification fields.
-    → "LLM_Generated_Certificates" MUST be generated with realistic, context-appropriate certifications.
-    → "LLM_Generated_Certificates" MUST NOT be empty when original certifications are missing.
+PERSONA INSIGHTS
+Infer ONLY behavioural patterns and strengths (no hallucination).
 
-
-- Under NO condition should both the original Certifications AND LLM_Generated_Certificates be filled at the same time.
-
+CAREER STAGE CATEGORY
+One of: “Student”, “Early Professional”, “Mid Career Pivot”, “Job Seeker”.
 ------------------------------------------------------------
 JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
 ------------------------------------------------------------
@@ -299,7 +678,7 @@ JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
     ],
     "Salary grades": "",
     "Career Objective": "",
-        "Career Interest Areas": "",
+    "Career Interest Areas": ""
   },
 
   "Anchor Attributes": {
@@ -335,6 +714,8 @@ JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
   "Industry":"",
   "ProfileSnapshot": "",
   "ExperienceLevel": "",
+  "AllCompanies": [],
+  "AllRoles": [],
 
   "LLM_Generated_Certificates": [],
   "LLM_Generated_Technical_Skills": [],
@@ -342,90 +723,16 @@ JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
 }
 
 ------------------------------------------------------------
-INSTRUCTION RULES (APPLY TO ALL FIELDS)
-------------------------------------------------------------
-
-SUMMARY:
-The "Summary" must be a powerful 2–3 line high-level snapshot capturing:
-– Role/domain identity  
-– Key skills (technical or soft)  
-– Highest education or academic background  
-– Only One appropriate **Industry–Domain pairing**, chosen **ONLY one domain and industry** from resume evidence and based on the examples below:
-
-    • Industry - Financial Services  
-      Domain - Retail Banking, Mortgage Processing, Fraud Detection  
-
-    • Industry - Healthcare  
-      Domain - Patient Scheduling, Clinical Documentation, Medical Billing & Claims  
-
-    • Industry - E-commerce / Retail  
-      Domain - Inventory Management, Logistics & Fulfillment  
-
-    • Industry - Telecommunications  
-      Domain - Billing and Invoicing, Network Provisioning, Customer Relationship Management  
-
-
-SKILLS:
-Tools → programming languages, frameworks, cloud tools, software, platforms  
-HardSkills → technical, domain, analytical, operational skills  
-SoftSkills → behavioural, communication, leadership, interpersonal skills  
-
-EXPERIENCE:
-YearsOfExperience is used ONLY if explicitly mentioned.
-You MAY calculate or infer from dates and timelines if clearly provided.
-
-INDUSTRY DOMAIN:
-Extract domain if explicitly mentioned or clearly implied.
-Examples: IT, HR, Sales, Marketing, Operations, Healthcare, Finance, EdTech.
-If unclear → “Not specified”.
-
-PROFILE SNAPSHOT:
-A short 1-line mini-summary of role + experience + key skill.
-
-EXPERIENCE LEVEL:
-Choose ONLY from actual job roles, job titles, leadership positions, or responsibilities.
-Allowed values:
-“Fresher”,  
-“Junior”,  
-“Mid-Level”,  
-“Senior”,  
-“Lead”,  
-“Manager”,  
-“Senior Manager”,  
-“Director”,  
-“Senior Director”,  
-“Vice President”,  
-“Senior Vice President”,  
-“C-Level Executive”,  
-“Founder / Co-Founder”,  
-“Head / Department Head”,  
-“Not specified”
-
-PERSONA INSIGHTS:
-Interpret strengths, behaviour traits, and working style ONLY from resume evidence.
-
-CAREER STAGE CATEGORY:
-One of:
-“Student”, “Early Professional”, “Mid Career Pivot”, “Job Seeker”.
-
-------------------------------------------------------------
 FINAL RULES
 ------------------------------------------------------------
-– Output MUST be valid JSON.  
-– Start with “{” and end with “}”.  
-– No explanation, no markdown, no extra text.  
-– Never hallucinate factual data.  
-– Only auto-fill Technical Skills, Soft Skills, and Certifications inside Talent Information if missing.
-– If empty, DO NOT fill the original fields.
-– Instead fill ONLY:
-    "LLM_Generated_Technical_Skills",
-    "LLM_Generated_Soft_Skills",
-    "LLM_Generated_Certificates".
-– If any certifications exist in the resume → LLM_Generated_Certificates MUST be empty.
-– If no certifications exist → LLM_Generated_Certificates MUST be generated.
-– Infer ONLY in Persona Insights, not in structured fields.
-
-
+– Output MUST be valid JSON only.  
+– No explanation, no markdown, no surrounding text.  
+– NO hallucination of factual information.  
+– Respect ALL skill limits (HardSkills=10, SoftSkills=5).  
+– Auto-fill ONLY the LLM_Generated_* fields when originals are empty.  
+– If certifications exist in resume → LLM_Generated_Certificates MUST remain empty.  
+– Keep Domain and Industry as exactly ONE each.  
+– Do NOT modify existing schema or reorder keys.  
 
 """
 
