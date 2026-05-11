@@ -136,61 +136,6 @@
       "question": "Have you done any certifications, courses, or attended workshops recently?",
       "type": "Multiple select + add Tag",
       "iconfilename": "Certificate"
-    },
-    {
-      "parameter": "Salary Grades",
-      "question": "If you’re comfortable sharing, what’s your current or expected salary range? ",
-      "type": "Single Select",
-      "iconfilename": "Salary",
-      "options": [
-        "4–6 LPA",
-        "7–10 LPA",
-        "11–15 LPA",
-        "Prefer not to say"
-      ]
-    },
-    {
-      "parameter": "Projects",
-      "question": "Have you worked on any cool projects—college, work, or just for fun—that you’d love to share?",
-      "type": "Multiple select + add Tag",
-      "iconfilename": "Task Management"
-      
-    },
-    {
-      "parameter": "Languages Known",
-      "question": "Which languages can you speak, read, or write?",
-      "type": "Multiple select + Dropdown",
-      "iconfilename": "Translation",
-      "options": [
-        "English",
-        "Hindi",
-        "Bengali",
-        "Tamil",
-        "Telugu",
-        "Marathi",
-        "Gujarati",
-        "Punjabi",
-        "Malayalam",
-        "Kannada",
-        "Urdu",
-        "Mandarin Chinese",
-        "Japanese",
-        "Korean",
-        "Arabic",
-        "French",
-        "German",
-        "Italian",
-        "Portuguese",
-        "Spanish",
-        "Russian",
-        "Swahili"
-      ]
-    },
-    {
-      "parameter": "Career Objective",
-      "question": "If you had to describe yourself in your career—what you do, what drives you, and what kind of work really excites you—how would you sum it up in a few lines?",
-      "type": "Short text",
-      "iconfilename": "Career Path"
     }
   ],
 
@@ -223,31 +168,35 @@
         "type": "Multiple select"
       },
       {
-        "parameter": "Functional Skills",
-        "question": "What strengths just come naturally to you when you're working?",
-        "iconfilename": "Soft Skills",
-        "type": "Multiple select + Add New"
-      },
-      {
-        "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "What kind of work environment or setup helps you perform at your best?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 5
-      },
-      {
-        "parameter": "Work Values",
-        "question": "When you think about growing in your career, what really matters most to you?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 3
-      },
-      {
-        "parameter": "Career Interests",
-        "question": "What new areas, roles or projects at work would excite you the most to explore?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + Add New"
-      }
+          "parameter": "Functional Skills + Work Activities",
+          "question": "What do you do when an important task suddenly faces a problem?",
+          "iconfilename": "Soft Skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "How do you handle situations when there’s no clear process for solving something?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Behavioral Skills + Abilities",
+          "question": "How do you respond when two coworkers strongly disagree?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Styles",
+          "question": "What is your ideal workplace?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "How do you react when you receive tough feedback from your manager?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        }
     ]
   },
   {
@@ -278,31 +227,35 @@
         "type": "Multiple select"
       },
       {
-        "parameter": "Functional Skills",
-        "question": "What do you feel you’re naturally good at?",
-        "iconfilename": "Soft Skills",
-        "type": "Multiple select + Add New"
-      },
-      {
-        "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "Which type of work environment do you feel fits you best?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 5
-      },
-      {
-        "parameter": "Work Values",
-        "question": "What matters the most to you when choosing a job or field?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 3
-     },
-      {
-        "parameter": "Career Interests",
-        "question": "Which new areas, roles or projects are you most interested in exploring these days?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + Add New"
-      }
+          "parameter": "Functional Skills + Work Activities",
+          "question": "When something important in a project goes wrong, what do you usually do?",
+          "iconfilename": "Soft Skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "When there’s no clear way to solve an assignment or problem, how do you handle it?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Behavioral Skills + Abilities",
+          "question": "During a group project disagreement, what do you usually do?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Styles",
+          "question": "What is your ideal learning/work environment like?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "How do you respond when you receive strong criticism on your work?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        }
     ]
   },
   {
@@ -333,31 +286,35 @@
         "type": "Multiple select"
       },
       {
-        "parameter": "Functional Skills",
-        "question": " What kind of strengths come naturally to you at work?",
-        "iconfilename": "Soft Skills",
-        "type": "Multiple select + Add New"
-      },
-      {
-        "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "What kind of work environment or setup helps you perform at your best?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 5
-      },
-      {
-        "parameter": "Work Values",
-        "question": "What matters most to you in your next career move?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 3
-      },
-      {
-        "parameter": "Career Interests",
-        "question": "If you could explore a new role, what direction would excite you most?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + Add New"
-      }
+          "parameter": "Functional Skills + Work Activities",
+          "question": "When you face unexpected challenges in a new role, how do you respond?",
+          "iconfilename": "Soft Skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "When you enter unfamiliar territory, what is your approach?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Behavioral Skills + Abilities",
+          "question": "When experienced professionals disagree around you, how do you handle it?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Styles",
+          "question": "What is your ideal workspace during a transition?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "When you receive critical feedback while adapting, how do you react?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        }
     ]
   },
   {
@@ -388,31 +345,35 @@
         "type": "Multiple select"
       },
       {
-        "parameter": "Functional Skills",
-        "question": "What strengths or talents come naturally to you?",
-        "iconfilename": "Soft Skills",
-        "type": "Multiple select + Add New"
-      },
-      {
-        "parameter": "Work Styles + Work Activities + Abilities",
-        "question": "What kind of work environment or setup helps you perform at your best?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 5
-      },
-      {
-        "parameter": "Work Values",
-        "question": "What matters most to you in a job right now?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + limit",
-        "Limit": 3
-      },
-      {
-        "parameter": "Career Interests",
-        "question": "If you could try a new role or career direction, what would excite you the most?",
-        "iconfilename": "Communication skills",
-        "type": "Multiple select + Add New"
-      }
+          "parameter": "Functional Skills + Work Activities",
+          "question": "When facing difficulties while restarting your career?",
+          "iconfilename": "Soft Skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Career Interests",
+          "question": "When unsure how to restart professionally?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Behavioral Skills + Abilities",
+          "question": "When receiving mixed advice from different people?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Styles",
+          "question": "Your ideal workplace when returning?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        },
+        {
+          "parameter": "Work Values",
+          "question": "When you receive rejection or critical feedback?",
+          "iconfilename": "Communication skills",
+          "type": "Single Select"
+        }
     ]
   }
 ],
@@ -458,41 +419,10 @@
           "type": "Multiple select + add Tag"
         },
         {
-          "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside your job, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
-          "iconfilename": "Unity",
-          "options": [
-            "Volunteered for a social cause or NGO",
-            "Helped organize community events",
-            "Participated in cultural exchange programs",
-            "Mentored someone or guided juniors",
-            "Raised awareness or funds for a cause",
-            "Worked with people from diverse backgrounds",
-            "Traveled for learning, not just fun",
-            "Engaged in online communities or activism"
-          ],
-          "type": "Multiple select + Add New"
-        },
-        {
           "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
           "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
           "iconfilename": "Rocket",
           "type": "Multiple select + add Tag"
-        },
-        {
-          "parameter": "Interests - RIASEC",
-          "question": "Which of these best matches your work or life preferences?",
-          "iconfilename": "Abilities",
-          "options": [
-            "Realistic – I like hands-on work, tools, machines, or outdoors",
-            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-            "Artistic – I lean toward creative, unstructured, expressive work",
-            "Social – I like helping, teaching, or guiding others",
-            "Enterprising – I enjoy leading, influencing, or starting things",
-            "Conventional – I prefer organizing, structuring, or working with systems and details"
-          ],
-          "type": "Multiple select + limit",
-          "Limit": 3
         }
       ]
     },
@@ -536,41 +466,10 @@
           "type": "Multiple select + add Tag"
         },
         {
-          "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside studies, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
-          "iconfilename": "Unity",
-          "options": [
-            "Volunteered for a social cause or NGO",
-            "Helped organize community events",
-            "Participated in cultural exchange programs",
-            "Mentored someone or guided juniors",
-            "Raised awareness or funds for a cause",
-            "Worked with people from diverse backgrounds",
-            "Traveled for learning, not just fun",
-            "Engaged in online communities or activism"
-          ],
-          "type": "Multiple select + Add New"
-        },
-        {
           "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
           "question": "Have you picked up any new tools, tech, or topics recently – or planning to?",
           "iconfilename": "Rocket",
           "type": "Multiple select + add Tag"
-        },
-        {
-          "parameter": "Interests - RIASEC",
-          "question": "Which of these best matches your work or life preferences?",
-          "iconfilename": "Abilities",
-          "options": [
-            "Realistic – I like hands-on work, tools, machines, or outdoors",
-            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-            "Artistic – I lean toward creative, unstructured, expressive work",
-            "Social – I like helping, teaching, or guiding others",
-            "Enterprising – I enjoy leading, influencing, or starting things",
-            "Conventional – I prefer organizing, structuring, or working with systems and details"
-          ],
-          "type": "Multiple select + limit",
-          "Limit": 3
         }
       ]
     },
@@ -614,41 +513,10 @@
           "type": "Multiple select + add Tag"
         },
         {
-          "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside your job, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
-          "iconfilename": "Unity",
-          "options": [
-            "Volunteered for a social cause or NGO",
-            "Helped organize community events",
-            "Participated in cultural exchange programs",
-            "Mentored someone or guided juniors",
-            "Raised awareness or funds for a cause",
-            "Worked with people from diverse backgrounds",
-            "Traveled for learning, not just fun",
-            "Engaged in online communities or activism"
-          ],
-          "type": "Multiple select + Add New"
-        },
-        {
           "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
           "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
           "iconfilename": "Rocket",
           "type": "Multiple select + add Tag"
-        },
-        {
-          "parameter": "Interests - RIASEC",
-          "question": "Which of these best matches your work or life preferences?",
-          "iconfilename": "Abilities",
-          "options": [
-            "Realistic – I like hands-on work, tools, machines, or outdoors",
-            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-            "Artistic – I lean toward creative, unstructured, expressive work",
-            "Social – I like helping, teaching, or guiding others",
-            "Enterprising – I enjoy leading, influencing, or starting things",
-            "Conventional – I prefer organizing, structuring, or working with systems and details"
-          ],
-          "type": "Multiple select + limit",
-          "Limit": 3
         }
       ]
     },
@@ -692,41 +560,10 @@
           "type": "Multiple select + add Tag"
         },
         {
-          "parameter": "Social Causes + Volunteering + Cultural Exposure",
-          "question": "Outside your job, have you engaged in social work, volunteering, or cultural activities that gave you new insights?",
-          "iconfilename": "Unity",
-          "options": [
-            "Volunteered for a social cause or NGO",
-            "Helped organize community events",
-            "Participated in cultural exchange programs",
-            "Mentored someone or guided juniors",
-            "Raised awareness or funds for a cause",
-            "Worked with people from diverse backgrounds",
-            "Traveled for learning, not just fun",
-            "Engaged in online communities or activism"
-          ],
-          "type": "Multiple select + Add New"
-        },
-        {
           "parameter": "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
           "question": "We’re always growing — what’s something new you’ve recently learned or are excited to explore next?",
           "iconfilename": "Rocket",
           "type": "Multiple select + add Tag"
-        },
-        {
-          "parameter": "Interests - RIASEC",
-          "question": "Which of these best matches your work or life preferences?",
-          "iconfilename": "Abilities",
-          "options": [
-            "Realistic – I like hands-on work, tools, machines, or outdoors",
-            "Investigative – I enjoy research, analysis, theories, or solving complex problems",
-            "Artistic – I lean toward creative, unstructured, expressive work",
-            "Social – I like helping, teaching, or guiding others",
-            "Enterprising – I enjoy leading, influencing, or starting things",
-            "Conventional – I prefer organizing, structuring, or working with systems and details"
-          ],
-          "type": "Multiple select + limit",
-          "Limit": 3
         }
       ]
     }
