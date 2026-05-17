@@ -346,31 +346,31 @@
       },
       {
           "parameter": "Functional Skills + Work Activities",
-          "question": "When facing difficulties while restarting your career?",
+          "question": "What challenges do you face while trying to restart your career?",
           "iconfilename": "Soft Skills",
           "type": "Single Select"
         },
         {
           "parameter": "Career Interests",
-          "question": "When unsure how to restart professionally?",
+          "question": "How do you usually feel when you are unsure about restarting your professional journey?",
           "iconfilename": "Communication skills",
           "type": "Single Select"
         },
         {
           "parameter": "Behavioral Skills + Abilities",
-          "question": "When receiving mixed advice from different people?",
+          "question": "How do you handle situations where you receive mixed advice from different people?",
           "iconfilename": "Communication skills",
           "type": "Single Select"
         },
         {
           "parameter": "Work Styles",
-          "question": "Your ideal workplace when returning?",
+          "question": "What does your ideal workplace look like when returning to work?",
           "iconfilename": "Communication skills",
           "type": "Single Select"
         },
         {
           "parameter": "Work Values",
-          "question": "When you receive rejection or critical feedback?",
+          "question": "How do you respond when you receive rejection or critical feedback?",
           "iconfilename": "Communication skills",
           "type": "Single Select"
         }

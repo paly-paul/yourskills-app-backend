@@ -5,6 +5,10 @@ from typing import Optional, Dict, Any, List
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException
+import app.db.database as database
+
+from pymongo import DESCENDING
+
 
 from app.utils.hash import hash_password, generate_temp_password, generate_tenant_id
 from app.schemas.user import AnswerCreate
@@ -207,3 +211,159 @@ async def save_answers_without_cv(
         await db["answers_without_cv"].insert_many(answer_docs)
 
     return {"message": "Answers saved successfully (without CV)", "document_id": str(document_id)}
+
+# async def get_user_management_summary(user_id: str, reference_id: str):
+#     if database.db is None:
+#         raise RuntimeError("MongoDB not initialized")
+
+#     # ---------------------------
+#     # USER DETAILS
+#     # ---------------------------
+#     user_query = (
+#         {"_id": ObjectId(user_id)}
+#         if ObjectId.is_valid(user_id)
+#         else {"_id": user_id}
+#     )
+
+#     user = await database.db["users"].find_one(
+#         user_query,
+#         {"password": 0}
+#     )
+
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
+
+#     user_data = {
+#         "id": str(user["_id"]),
+#         "username": user.get("username"),
+#         "email": user.get("email"),
+#         "tenant_id": user.get("tenant_id"),
+#         "created_at": user.get("created_at"),
+#     }
+
+#     # ---------------------------
+#     # FINAL SNAPSHOT
+#     # ---------------------------
+#     final_snapshot_doc = await database.db["final_skill_snapshot"].find_one(
+#         {
+#             "user_id": user_id,
+#             "reference_id": reference_id,
+#         },
+#         sort=[("created_at", DESCENDING)]
+#     )
+
+#     final_snapshot = None
+#     if final_snapshot_doc:
+#         final_snapshot = {
+#             "snapshot_version": final_snapshot_doc.get("snapshot_version"),
+#             "result": final_snapshot_doc.get("result"),
+#             "created_at": final_snapshot_doc.get("created_at"),
+#         }
+
+#     # ---------------------------
+#     # MODEL RESULTS
+#     # ---------------------------
+#     cursor = database.db["model_results"].find(
+#         {
+#             "user_id": user_id,
+#             "reference_id": reference_id,
+#         }
+#     ).sort("created_at", DESCENDING)
+
+#     models = {}
+
+#     async for doc in cursor:
+#         model_name = doc.get("model_name", "unknown")
+#         models[model_name] = {
+#             "created_at": doc.get("created_at"),
+#             "result": doc.get("result"),
+#         }
+
+#     return {
+#         "user": user_data,
+#         "final_snapshot": final_snapshot,
+#         "models": models,
+#     }
+
+from bson import ObjectId
+from fastapi import HTTPException
+from pymongo import DESCENDING
+import app.db.database as database
+
+
+async def get_user_management_summary(user_id: str):
+    if database.db is None:
+        raise RuntimeError("MongoDB not initialized")
+
+    # 1️⃣ USER DETAILS
+    user = await database.db["users"].find_one(
+        {"_id": ObjectId(user_id)},
+        {"password": 0}
+    )
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_data = {
+        "id": str(user["_id"]),
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "tenant_id": user.get("tenant_id"),
+        "created_at": user.get("created_at"),
+    }
+
+    # 2️⃣ FETCH ALL RESUMES (UPLOADS)
+    uploads_cursor = database.db["uploads"].find(
+        {"user_id": ObjectId(user_id)}
+    ).sort("uploaded_at", DESCENDING)
+
+    resumes = []
+
+    async for upload in uploads_cursor:
+        reference_id = upload.get("reference_id") or str(upload["_id"])
+
+        # 3️⃣ FINAL SNAPSHOT (LATEST)
+        final_snapshot_doc = await database.db["final_skill_snapshot"].find_one(
+            {
+                "user_id": user_id,
+                "reference_id": reference_id,
+            },
+            sort=[("created_at", DESCENDING)]
+        )
+
+        final_snapshot = None
+        if final_snapshot_doc:
+            final_snapshot = {
+                "snapshot_version": final_snapshot_doc.get("snapshot_version"),
+                "result": final_snapshot_doc.get("result"),
+                "created_at": final_snapshot_doc.get("created_at"),
+            }
+
+        # 4️⃣ MODEL RESULTS (LATEST PER MODEL)
+        cursor = database.db["model_results"].find(
+            {
+                "user_id": user_id,
+                "reference_id": reference_id,
+            }
+        ).sort("created_at", DESCENDING)
+
+        models = {}
+        async for doc in cursor:
+            model_name = doc.get("model_name", "unknown")
+            if model_name not in models:
+                models[model_name] = {
+                    "created_at": doc.get("created_at"),
+                    "result": doc.get("result"),
+                }
+
+        resumes.append({
+            "reference_id": reference_id,
+            "uploaded_at": upload.get("uploaded_at"),
+            "final_snapshot": final_snapshot,
+            "models": models,
+        })
+
+    return {
+        "user": user_data,
+        "resumes": resumes,
+    }

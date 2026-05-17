@@ -6,7 +6,7 @@ from app.utils.cv_extractor import predict_audience_type
 from app.utils.cv_extractor import generate_missing_field_suggestions, generate_anchor_attribute_options, generate_anchor_options_from_answers_without_cv, generate_job_attribute_options_without_cv
 from app.services.cv_comparison import get_cv_summary
 import json
-
+from app.utils.cv_extractor import generate_job_attribute_options
 
 async def get_missing_field_questions_service(section: str, db, current_user):
     uploads_collection = db["uploads"]
@@ -145,29 +145,114 @@ async def get_missing_field_questions_service(section: str, db, current_user):
 
 
 
+# async def get_audience_questions_service(db, current_user):
+#     uploads_collection = db["uploads"]
+
+#     latest_cv = await uploads_collection.find_one(
+#         {"user_id": ObjectId(current_user["_id"])},
+#         sort=[("_id", -1)]
+#     )
+#     if not latest_cv or "parsed_data" not in latest_cv:
+#         raise HTTPException(status_code=404, detail="No CV data found for this user")
+
+#     audience_type = latest_cv.get("audienceType")
+#     job_questions_with_options = latest_cv.get("job_questions_with_options", [])
+
+#     if not job_questions_with_options:
+#         raise HTTPException(status_code=404, detail="No job questions found for this user")
+
+#     return {
+#         "success": True,
+#         "audienceType": audience_type,
+#         "questions": job_questions_with_options,
+#     }
+
 async def get_audience_questions_service(db, current_user):
+
     uploads_collection = db["uploads"]
+    questions_collection = db["questions"]
 
     latest_cv = await uploads_collection.find_one(
         {"user_id": ObjectId(current_user["_id"])},
         sort=[("_id", -1)]
     )
+
     if not latest_cv or "parsed_data" not in latest_cv:
-        raise HTTPException(status_code=404, detail="No CV data found for this user")
+        raise HTTPException(
+            status_code=404,
+            detail="No CV data found for this user"
+        )
 
-    audience_type = latest_cv.get("audienceType")
-    job_questions_with_options = latest_cv.get("job_questions_with_options", [])
+    # -------------------------------
+    # PRIORITY:
+    # selected audience type
+    # fallback -> extracted audience type
+    # -------------------------------
 
-    if not job_questions_with_options:
-        raise HTTPException(status_code=404, detail="No job questions found for this user")
+    audience_type = (
+        latest_cv.get("selectedAudienceType")
+        or latest_cv.get("audienceType")
+    )
+
+    parsed_data = latest_cv.get("parsed_data", {})
+
+    # -------------------------------
+    # FETCH QUESTIONS JSON
+    # -------------------------------
+
+    questions_doc = await questions_collection.find_one({})
+
+    if not questions_doc:
+        raise HTTPException(
+            status_code=404,
+            detail="Questions configuration not found"
+        )
+
+    job_attributes = questions_doc.get("Job attributes", [])
+
+    matching_job = next(
+        (
+            item for item in job_attributes
+            if item.get("audienceType") == audience_type
+        ),
+        None
+    )
+
+    if not matching_job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No questions found for audience type: {audience_type}"
+        )
+
+    # -------------------------------
+    # GENERATE OPTIONS DYNAMICALLY
+    # -------------------------------
+
+    job_questions = matching_job.get("questions", [])
+
+    job_options = await generate_job_attribute_options(
+        parsed_data,
+        job_questions
+    )
+
+    questions = job_options.get("suggestions", [])
+
+    # OPTIONAL:
+    # save regenerated questions
+    await uploads_collection.update_one(
+        {"_id": latest_cv["_id"]},
+        {
+            "$set": {
+                "job_questions_with_options": questions
+            }
+        }
+    )
 
     return {
         "success": True,
         "audienceType": audience_type,
-        "questions": job_questions_with_options,
+        "questions": questions,
     }
-
-
 
 
 
@@ -194,7 +279,11 @@ async def get_questions_by_parameters(db, current_user, attribute_type: str, par
 
     parsed_data = latest_cv["parsed_data"]
 
-    audience_type = predict_audience_type(parsed_data)
+    # audience_type = predict_audience_type(parsed_data)
+    audience_type = (
+        latest_cv.get("selectedAudienceType")
+        or latest_cv.get("audienceType")
+    )
 
     questions_doc = await questions_collection.find_one({})
     if not questions_doc:
@@ -251,7 +340,11 @@ async def get_questions_excluding_parameters(
 
     parsed_data = latest_cv["parsed_data"]
     cv_id = str(latest_cv["_id"])
-    audience_type = predict_audience_type(parsed_data)
+    # audience_type = predict_audience_type(parsed_data)
+    audience_type = (
+        latest_cv.get("selectedAudienceType")
+        or latest_cv.get("audienceType")
+    )
 
     normalized_excludes = [normalize_parameter(e) for e in exclude_params]
 

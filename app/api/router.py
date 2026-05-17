@@ -26,6 +26,8 @@ from app.services.profile import (
 )
 from app.utils.cv_extractor import generate_job_attribute_options
 import re
+from app.schemas.user import EditProfileRequest
+from app.utils import verify_password, hash_password
 
 import os
 import google.generativeai as genai
@@ -257,7 +259,6 @@ async def get_missing_field_questions(
 ):
     return await get_missing_field_questions_service(section, db, current_user)
 
-
 @router.get("/job-questions")
 async def get_audience_questions(
     db=Depends(get_database),
@@ -271,6 +272,42 @@ async def get_audience_questions(
                 q["parameter"] = "+".join(str(p) for p in q["parameter"])
 
     return response
+
+@router.post("/update-audience-type")
+async def update_audience_type(
+    payload: dict,
+    db=Depends(get_database),
+    current_user=Depends(get_current_user)
+):
+
+    selected_audience_type = payload.get("audienceType")
+
+    uploads_collection = db["uploads"]
+
+    latest_cv = await uploads_collection.find_one(
+        {"user_id": ObjectId(current_user["_id"])},
+        sort=[("_id", -1)]
+    )
+
+    if not latest_cv:
+        raise HTTPException(
+            status_code=404,
+            detail="No CV found"
+        )
+
+    await uploads_collection.update_one(
+        {"_id": latest_cv["_id"]},
+        {
+            "$set": {
+                "selectedAudienceType": selected_audience_type
+            }
+        }
+    )
+
+    return {
+        "success": True,
+        "selectedAudienceType": selected_audience_type
+    }
 
 @router.get("/anchor-questions/parameters")
 async def get_anchor_questions_by_parameters(
@@ -1595,221 +1632,6 @@ def to_catchy_keyword(phrase):
 
     return " ".join([w.capitalize() for w in words])
 
-# @router.get("/summary/model")
-# async def extract_cv_summary(
-#     db: AsyncIOMotorDatabase = Depends(get_database),
-#     current_user: dict = Depends(get_current_user)
-# ):
-#     """
-#     Uses Gemini to summarize only 'Talent Information' + 'Anchor Attributes'
-#     from the user's CV/profile data.
-#     Deduplicates repeated entries and returns single-value catchy keywords.
-#     Ensures no empty fields, ignores input format.
-#     """
-
-#     cv_data = await get_cv_profile_data(db, current_user)
-
-#     parsed_resume = {
-#         "Talent Information": cv_data.get("Talent Information", {}),
-#         "Anchor Attributes": cv_data.get("Anchor Attributes", {})
-#     }
-
-#     key_map = {
-#         "Behavioral Skills": "Behavioural Skills",
-#         "Social Causes": "Social Cause",
-#         "Future study intent": "Future Study Intent"
-#     }
-#     for section in parsed_resume:
-#         for old_key, new_key in key_map.items():
-#             if old_key in parsed_resume[section]:
-#                 parsed_resume[section][new_key] = parsed_resume[section].pop(old_key)
-
-#     extract_prompt = f"""
-# You are a precise JSON extractor. Your task is to extract the **most relevant, unique, and concise keywords or phrases** from a structured resume JSON.  
-
-# Requirements:
-# 1. For each field, provide a **single short keyword or catchy phrase** (max 3 words).  
-# 2. Prefer **impactful, buzzword-style keywords** that can stand alone.  
-# 3. Ensure **all keywords are unique** across all fields.  
-# 4. If a field is missing or contains "Not specified", handle as:
-#    - "Hobbies": output []
-#    - All other fields: output "Not specified"  
-# 5. If a value appears relevant for multiple fields, assign it to the **most appropriate field** only.  
-# 6. Avoid generic duplicates. Each keyword must be distinct.
-
-# **Talent attributes:**
-# 1. Core Code:
-# - Core Tasks
-# - Supplementary Tasks
-# - Hot Technologies
-# - Functional Skills
-# - Skills
-
-# 2. DNA of Work:
-# - Work Activities
-# - Work Values
-# - Work Styles
-# - Abilities
-
-# 3. Interest Compass:
-# - Career Interest Areas
-# - Knowledge
-# - Emerging Tasks
-
-# 4. Upskills Unlocked:
-# - Newly Acquired Skills
-# - Emerging Tech Awareness
-
-# **Anchor attributes:**
-# 1. Passion Palette:
-# - Hobbies (top 2 as a JSON array)
-# - Personal Interests
-# - Motivating Activities
-# - Social Cause
-# - Cultural Exposure
-# - Volunteering
-
-# 2. Drives You:
-# - Motivation Drivers
-# - Competency
-# - Learning Agility
-# - Cognitive Preferences
-# - Creative Inclinations
-
-# 3. Rooted In You:
-# - Achievements
-# - Life Skills
-# - Behavioural Skills
-# - Organizational Skills
-# - Personality Traits
-
-# 4. Moves You Forward:
-# - Exploration Interest
-# - Future Study Intent
-
-# **Output format:**  
-# Provide a **single JSON object** with exactly this structure:
-
-# {{
-#   "Talent attributes": {{
-#     "Core Code": {{
-#       "Core Tasks": "",
-#       "Supplementary Tasks": "",
-#       "Hot Technologies": "",
-#       "Functional Skills": "",
-#       "Skills": ""
-#     }},
-#     "DNA of work": {{
-#       "Work Activities": "",
-#       "Work Values": "",
-#       "Work Styles": "",
-#       "Abilities": ""
-#     }},
-#     "Interest Compass": {{
-#       "Career Interest Areas": "",
-#       "Knowledge": "",
-#       "Emerging Tasks": ""
-#     }},
-#     "Upskills Unlocked": {{
-#       "Newly Acquired Skills": "",
-#       "Emerging Tech Awareness": ""
-#     }}
-#   }},
-#   "Anchor attributes": {{
-#     "Passion Palette": {{
-#       "Hobbies": [],
-#       "Personal Interests": "",
-#       "Motivating Activities": "",
-#       "Social Cause": "",
-#       "Cultural Exposure": "",
-#       "Volunteering": ""
-#     }},
-#     "Drives You": {{
-#       "Motivation Drivers": "",
-#       "Competency": "",
-#       "Learning Agility": "",
-#       "Cognitive Preferences": "",
-#       "Creative Inclinations": ""
-#     }},
-#     "Rooted In You": {{
-#       "Achievements": "",
-#       "Life Skills": "",
-#       "Behavioural Skills": "",
-#       "Organizational Skills": "",
-#       "Personality Traits": ""
-#     }},
-#     "Moves you forward": {{
-#       "Exploration Interest": "",
-#       "Future Study Intent": ""
-#     }}
-#   }}
-# }}
-
-# **Instructions:**
-# - Review each field in the input JSON.  
-# - Extract the **most relevant item** per field.  
-# - Convert it into a **short, unique, buzzword-style phrase**.  
-# - Do not repeat keywords across fields.  
-
-# Input JSON:
-# {json.dumps(parsed_resume)}
-# """
-#     gemini_model = get_llm_model()
-#     response = await asyncio.to_thread(
-#         gemini_model.generate_content,
-#         contents=[extract_prompt],
-#         generation_config=genai.types.GenerationConfig(
-#             response_mime_type="application/json",
-#             temperature=0
-#         ),
-#     )
-#     try:
-#         extracted_data = json.loads(response.text)
-#     except json.JSONDecodeError:
-#         raise HTTPException(
-#             status_code=500,
-#             detail={
-#                 "error": "Failed to parse Gemini output",
-#                 "raw_output": response.text
-#             }
-#         )
-
-#     extracted_data = deduplicate_keywords(extracted_data)
-
-#     def safe_keyword(value):
-#         """Return single catchy keyword; fallback to 'Not specified'."""
-#         if not value:
-#             return "Not specified"
-#         if isinstance(value, list) and value:
-#             return to_catchy_keyword(value[0]) or "Not specified"
-#         if isinstance(value, str):
-#             return to_catchy_keyword(value) or "Not specified"
-#         return "Not specified"
-
-#     for main_key in extracted_data:
-#         for sub_key in extracted_data[main_key]:
-#             for field, value in extracted_data[main_key][sub_key].items():
-#                 extracted_data[main_key][sub_key][field] = safe_keyword(value)
-
-#     def remove_not_specified(d):
-#         """Recursively remove keys with value 'Not specified'."""
-#         if isinstance(d, dict):
-#             return {
-#                 k: remove_not_specified(v)
-#                 for k, v in d.items()
-#                 if v != "Not specified" and remove_not_specified(v) != {}
-#             }
-#         elif isinstance(d, list):
-#             return [remove_not_specified(i) for i in d if i != "Not specified"]
-#         return d
-
-#     extracted_data = remove_not_specified(extracted_data)
-
-#     return {
-#         "success": True,
-#         "summary": extracted_data
-#     }
-
 @router.get("/summary/model")
 async def extract_cv_summary(
     db: AsyncIOMotorDatabase = Depends(get_database),
@@ -2031,4 +1853,108 @@ Input JSON:
     return {
         "success": True,
         "jobPrediction": job_prediction_output
+    }
+    
+from app.services.user import get_user_management_summary
+from app.schemas.user import UserManagementResponse
+from fastapi import APIRouter, Query
+from app.utils.token import get_current_user
+
+
+# @router.get(
+#     "/user-management/full-summary",
+#     tags=["User Management"]
+# )
+# async def user_management_full_summary(user_id: str):
+#     return await get_user_management_summary(user_id)
+
+@router.get(
+    "/user-management/full-summary",
+    tags=["User Management"]
+)
+async def user_management_full_summary(
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user["id"]   # derived from token
+    return await get_user_management_summary(user_id)
+
+
+@router.put("/edit-profile")
+async def edit_profile(
+    payload: EditProfileRequest,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(get_current_user)
+):
+    users_collection = db["users"]
+
+    user_id = ObjectId(current_user["_id"])
+
+    update_data = {}
+
+    # ---------------- Update Name ----------------
+    if payload.first_name:
+        update_data["first_name"] = payload.first_name
+
+    if payload.last_name:
+        update_data["last_name"] = payload.last_name
+
+    # ---------------- Update Email ----------------
+    if payload.email:
+
+        existing_email = await users_collection.find_one({
+            "email": payload.email,
+            "_id": {"$ne": user_id}
+        })
+
+        if existing_email:
+            raise HTTPException(
+                status_code=400,
+                detail="Email already exists"
+            )
+
+        update_data["email"] = payload.email
+
+    # ---------------- Change Password ----------------
+    if payload.new_password:
+
+        if not payload.current_password:
+            raise HTTPException(
+                status_code=400,
+                detail="Current password is required"
+            )
+
+        user = await users_collection.find_one({"_id": user_id})
+
+        if not verify_password(payload.current_password, user["password"]):
+            raise HTTPException(
+                status_code=400,
+                detail="Current password is incorrect"
+            )
+
+        update_data["password"] = hash_password(payload.new_password)
+
+    # ---------------- No Data Check ----------------
+    if not update_data:
+        raise HTTPException(
+            status_code=400,
+            detail="No fields provided to update"
+        )
+
+    # ---------------- Update User ----------------
+    await users_collection.update_one(
+        {"_id": user_id},
+        {"$set": update_data}
+    )
+
+    updated_user = await users_collection.find_one({"_id": user_id})
+
+    return {
+        "success": True,
+        "message": "Profile updated successfully",
+        "user": {
+            "id": str(updated_user["_id"]),
+            "first_name": updated_user.get("first_name"),
+            "last_name": updated_user.get("last_name"),
+            "email": updated_user.get("email")
+        }
     }
