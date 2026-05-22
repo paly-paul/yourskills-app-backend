@@ -29,6 +29,7 @@ from app.utils.cv_extractor import generate_job_attribute_options
 import re
 from app.schemas.user import EditProfileRequest
 from app.utils import verify_password, hash_password
+from app.schemas.user import EditProfileRequest
 
 import os
 import google.generativeai as genai

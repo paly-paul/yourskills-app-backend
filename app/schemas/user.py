@@ -4,7 +4,6 @@ from typing import Optional, List, Dict, Union, Any
 from datetime import datetime
 import uuid
 
-
 class UserCreate(BaseModel):
     first_name: constr(strip_whitespace=True, min_length=1)
     last_name: constr(strip_whitespace=True, min_length=1)
@@ -141,3 +140,35 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     otp: str
     new_password: constr(min_length=4)
+    
+class EditProfileRequest(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = None
+
+class UserInfo(BaseModel):
+    id: str
+    username: Optional[str]
+    email: Optional[str]
+    tenant_id: Optional[str]
+    created_at: Optional[datetime]
+
+
+class FinalSnapshot(BaseModel):
+    snapshot_version: Optional[str]
+    result: Optional[Dict[str, Any]]
+    created_at: Optional[datetime]
+
+
+class ModelResult(BaseModel):
+    created_at: Optional[datetime]
+    result: Optional[Dict[str, Any]]
+    
+class UserManagementResponse(BaseModel):
+    user: UserInfo
+    final_snapshot: Optional[FinalSnapshot]
+    models: Dict[str, ModelResult]
+    
+
