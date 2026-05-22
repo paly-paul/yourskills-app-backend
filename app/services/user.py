@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from typing import Optional, Dict, Any, List
 
@@ -10,7 +10,8 @@ import app.db.database as database
 from pymongo import DESCENDING
 
 
-from app.utils.hash import hash_password, generate_temp_password, generate_tenant_id
+from app.utils.hash import hash_password, generate_tenant_id, generate_otp
+from app.utils.email import send_otp_email
 from app.schemas.user import AnswerCreate
 from app.models.user import generate_uuid, AnswerModel, AnswerWithoutCvModel
 
@@ -35,20 +36,80 @@ async def get_user_by_username(db: AsyncIOMotorDatabase, username: str) -> Optio
 async def get_user_by_email(db: AsyncIOMotorDatabase, email: str) -> Optional[Dict[str, Any]]:
     return await db.users.find_one({"email": email})
 
-async def forgot_password(db: AsyncIOMotorDatabase, email: str) -> Optional[str]:
+async def create_google_user(db: AsyncIOMotorDatabase, email: str, name: str, google_id: str) -> dict:
+    tenant_id = generate_tenant_id()
+    new_user = {
+        "username": name,
+        "email": email,
+        "password": None,
+        "google_id": google_id,
+        "auth_provider": "google",
+        "tenant_id": tenant_id,
+        "created_at": datetime.utcnow(),
+        "is_temp_password": False
+    }
+    result = await db.users.insert_one(new_user)
+    new_user["_id"] = result.inserted_id
+    return new_user
+
+
+async def forgot_password(db: AsyncIOMotorDatabase, email: str) -> bool:
     user = await db.users.find_one({"email": email})
     if not user:
-        return None
+        return False
 
-    temp_pass = generate_temp_password()
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$set": {
-            "password": hash_password(temp_pass),
-            "is_temp_password": True
-        }}
+    if user.get("auth_provider") == "google":
+        raise HTTPException(
+            status_code=400,
+            detail="This account uses Google Sign-In. Password reset is not available."
+        )
+
+    otp = generate_otp()
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
+
+    await db["otp_store"].insert_one({
+        "email": email,
+        "otp": otp,
+        "expires_at": expires_at,
+        "used": False,
+        "created_at": datetime.utcnow()
+    })
+
+    await send_otp_email(email, otp)
+    return True
+
+
+async def reset_password_with_otp(db: AsyncIOMotorDatabase, email: str, otp: str, new_password: str) -> None:
+    user = await db.users.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if user.get("auth_provider") == "google":
+        raise HTTPException(
+            status_code=400,
+            detail="This account uses Google Sign-In. Password reset is not available."
+        )
+
+    otp_doc = await db["otp_store"].find_one(
+        {"email": email, "otp": otp, "used": False},
+        sort=[("created_at", -1)]
     )
-    return temp_pass
+
+    if not otp_doc:
+        raise HTTPException(status_code=400, detail="Invalid OTP.")
+
+    if datetime.utcnow() > otp_doc["expires_at"]:
+        raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
+
+    await db["otp_store"].update_one(
+        {"_id": otp_doc["_id"]},
+        {"$set": {"used": True}}
+    )
+
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {"password": hash_password(new_password), "is_temp_password": False}}
+    )
 
 
 async def save_extracted_cv_data(db: AsyncIOMotorDatabase, user_id: str, parsed_data: dict, file_path: str) -> Dict[str, Any]:
