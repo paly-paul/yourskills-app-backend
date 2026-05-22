@@ -2029,4 +2029,5 @@ async def edit_profile(
             "last_name": updated_user.get("last_name"),
             "email": updated_user.get("email")
         }
-    }
+    } 
+    
