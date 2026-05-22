@@ -56,7 +56,13 @@ async def register(user: UserCreate, db=Depends(get_database)):
         return {"success": False, "reason": "Email already exists."}
 
     created_user = await create_user(db, user)
-    token_data = {"user_id": str(created_user["_id"]), "username": created_user["username"]}
+    # token_data = {"user_id": str(created_user["_id"]), "username": created_user["username"]}
+    token_data = {
+        "user_id": str(created_user["_id"]),
+        "username": created_user["username"],
+        "first_name": created_user["first_name"],
+        "last_name": created_user["last_name"]
+    }
     access_token = create_access_token(token_data)
 
     return {
@@ -98,7 +104,9 @@ def get_profile(current_user=Depends(get_current_user)):
     profile_data = {
         "id": str(current_user["_id"]),
         "username": current_user["username"],
-        "email": current_user["email"]
+        "email": current_user["email"],
+        "first_name": current_user.get("first_name"),
+        "last_name": current_user.get("last_name"),
     }
     return {"success": True, "profile": profile_data}
 

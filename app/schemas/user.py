@@ -6,6 +6,8 @@ import uuid
 
 
 class UserCreate(BaseModel):
+    first_name: constr(strip_whitespace=True, min_length=1)
+    last_name: constr(strip_whitespace=True, min_length=1)
     username: constr(strip_whitespace=True, min_length=1)
     email: EmailStr
     password: constr(min_length=4)

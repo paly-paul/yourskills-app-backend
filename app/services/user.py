@@ -17,6 +17,8 @@ from app.models.user import generate_uuid, AnswerModel, AnswerWithoutCvModel
 async def create_user(db: AsyncIOMotorDatabase, user: Dict[str, Any]) -> Dict[str, Any]:
     tenant_id = generate_tenant_id()
     new_user = {
+        "first_name": user.first_name,
+        "last_name": user.last_name,
         "username": user.username,
         "email": user.email,
         "password": hash_password(user.password),
