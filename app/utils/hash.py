@@ -1,24 +1,24 @@
 
 
-from passlib.context import CryptContext
+import bcrypt
 import random
 import string
 import uuid
 from bson import ObjectId
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def hash_password(password: str) -> str:
-    """Hash a plaintext password."""
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 def generate_temp_password(length: int = 8) -> str:
     """Generate a temporary random alphanumeric password."""
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+def generate_otp(length: int = 6) -> str:
+    """Generate a numeric OTP of the given length."""
+    return ''.join(random.choices(string.digits, k=length))
 
 def generate_tenant_id(length: int = 10) -> str:
     """Generate a unique tenant ID prefixed with TEN."""

@@ -126,7 +126,15 @@ class AnswerCreate(BaseModel):
 class AnswersSubmit(BaseModel):
     answers: List[AnswerCreate]
 
-
-
     class Config:
         orm_mode = True
+
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: constr(min_length=4)

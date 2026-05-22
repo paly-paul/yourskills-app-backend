@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.db.database import get_database
-from app.schemas import UserCreate, UserLogin, ForgotPasswordRequest, AnswersSubmit
-from app.services.user import create_user, get_user_by_email, forgot_password, save_extracted_cv_data, save_latest_cv_answers, save_answers_without_cv
+from app.schemas import UserCreate, UserLogin, ForgotPasswordRequest, AnswersSubmit, ResetPasswordRequest
+from app.schemas.user import GoogleAuthRequest
+from app.services.user import create_user, get_user_by_email, forgot_password, reset_password_with_otp, save_extracted_cv_data, save_latest_cv_answers, save_answers_without_cv, create_google_user
 from app.utils import verify_password
 from app.utils.cv_extractor import extract_cv_data_from_file, predict_audience_type, generate_missing_field_suggestions
 from app.utils.token import create_access_token, get_current_user
@@ -66,18 +67,21 @@ async def register(user: UserCreate, db=Depends(get_database)):
 
 @router.post("/login")
 async def login(user: UserLogin, db=Depends(get_database)):
-  
+
     db_user = await db["users"].find_one({"email": user.email})
 
     if not db_user:
         return {"success": False, "reason": "User not found."}
+
+    if db_user.get("auth_provider") == "google":
+        return {"success": False, "reason": "This account uses Google Sign-In. Please sign in with Google."}
 
     if not verify_password(user.password, db_user["password"]):
         return {"success": False, "reason": "Invalid password."}
 
     token_data = {
         "user_id": str(db_user["_id"]),
-        "email": db_user["email"]  
+        "email": db_user["email"]
     }
     access_token = create_access_token(token_data)
 
@@ -102,12 +106,71 @@ def get_profile(current_user=Depends(get_current_user)):
 
 
 @router.post("/forgot-password")
-def forgot_password_route(payload: ForgotPasswordRequest, db=Depends(get_database)):
-    temp_password = forgot_password(db, payload.email)
-    if not temp_password:
-        raise HTTPException(status_code=404, detail="User not found")
+async def forgot_password_route(payload: ForgotPasswordRequest, db=Depends(get_database)):
+    sent = await forgot_password(db, payload.email)
+    if not sent:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return {"success": True, "message": "OTP sent to your email. It is valid for 10 minutes."}
 
-    return {"temp_password": temp_password, "message": "Use this to log in and reset your password"}
+
+@router.post("/reset-password")
+async def reset_password_route(payload: ResetPasswordRequest, db=Depends(get_database)):
+    await reset_password_with_otp(db, payload.email, payload.otp, payload.new_password)
+    return {"success": True, "message": "Password reset successfully."}
+
+@router.post("/auth/google")
+async def google_auth(payload: GoogleAuthRequest, db=Depends(get_database)):
+    import asyncio
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+
+    google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+    if not google_client_id:
+        raise HTTPException(status_code=500, detail="Google login is not configured on this server.")
+
+    try:
+        id_info = await asyncio.to_thread(
+            google_id_token.verify_oauth2_token,
+            payload.id_token,
+            google_requests.Request(),
+            google_client_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid Google token: {str(e)}")
+
+    email = id_info.get("email")
+    name = id_info.get("name") or (email.split("@")[0] if email else "user")
+    google_id = id_info.get("sub")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Google token does not contain an email address.")
+
+    existing_user = await db["users"].find_one({"email": email})
+
+    if existing_user:
+        token_data = {
+            "user_id": str(existing_user["_id"]),
+            "email": existing_user["email"]
+        }
+        access_token = create_access_token(token_data)
+        return {
+            "success": True,
+            "token": access_token,
+            "tenant_id": existing_user["tenant_id"]
+        }
+
+    new_user = await create_google_user(db, email, name, google_id)
+    token_data = {
+        "user_id": str(new_user["_id"]),
+        "email": new_user["email"]
+    }
+    access_token = create_access_token(token_data)
+    return {
+        "success": True,
+        "token": access_token,
+        "tenant_id": new_user["tenant_id"]
+    }
+
 
 @router.post("/extract-cv")
 async def extract_cv(

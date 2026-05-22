@@ -1,1 +1,1 @@
-from .user import UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, AnswerCreate, AnswersSubmit
+from .user import UserCreate, UserLogin, UserResponse, ForgotPasswordRequest, AnswerCreate, AnswersSubmit, ResetPasswordRequest
