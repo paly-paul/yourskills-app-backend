@@ -977,15 +977,15 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
 
 async def generate_job_attribute_options(cv_context: dict, questions_from_db: list) -> dict:
     """
-    Generates career-related multiple-choice options for each question.
+    Generates career-related multiple-choice options for all questions in ONE Gemini call.
 
     Rules:
     - If single parameter → 5 options.
     - If multiple parameters joined with '+' → 2 options per parameter.
-    - Considers both parameters and question meaning to generate options.
-    - Outputs a single list of options.
-    - Each option starts with a capital letter.
     """
+
+    if not questions_from_db:
+        return {"success": True, "suggestions": []}
 
     # ---- Extract the required fields ----
     summary = cv_context.get("Summary")
@@ -996,7 +996,6 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
     soft_skills = cv_context.get("SoftSkills") or cv_context.get("Skills", {}).get("SoftSkills")
     talent_attributes = cv_context.get("TalentAttributes") or cv_context.get("Talent Information")
 
-    # ---- DEDUPLICATION HELPER ----
     def dedupe(value):
         if isinstance(value, list):
             seen = set()
@@ -1007,16 +1006,11 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
                     seen.add(key)
                     unique.append(v)
             return unique
-
         if isinstance(value, str):
-            # Remove duplicate lines
             lines = value.split("\n")
-            unique_lines = list(dict.fromkeys(lines))
-            return "\n".join(unique_lines)
+            return "\n".join(dict.fromkeys(lines))
+        return value
 
-        return value  # dict or others
-
-    # ---- Build CLEAN context with NO duplicates ----
     filtered_context = {
         "Summary": dedupe(summary),
         "Experience": dedupe(experience),
@@ -1026,97 +1020,86 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         "SoftSkills": dedupe(soft_skills),
         "TalentAttributes": dedupe(talent_attributes),
     }
-
-    # ---- Convert filtered items into a string for LLM ----
-    context_str = "\n".join(
-        f"{k}: {v}" for k, v in filtered_context.items() if v
-    )
+    context_str = "\n".join(f"{k}: {v}" for k, v in filtered_context.items() if v)
 
     # ---- Audience filter ----
     audience_type = cv_context.get("audience_type") or cv_context.get("audience")
-
     if audience_type:
         questions_from_db = [
             q for q in questions_from_db
             if not q.get("audience") or q.get("audience") == audience_type
         ]
 
-    async def _fetch_options_for_question(q):
+    # ---- Build questions payload for single batched call ----
+    questions_payload = []
+    for i, q in enumerate(questions_from_db):
         parameter = q.get("parameter", "")
-        question_text = q.get("question")
-        qtype = q.get("type")
-        iconfilename = q.get("iconfilename")
-        limit = q.get("limit") or q.get("Limit")
-
         parameter_list = [p.strip() for p in parameter.split(" + ")]
         option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
+        questions_payload.append({
+            "id": i,
+            "parameter": ", ".join(parameter_list),
+            "question": q.get("question"),
+            "option_count": option_count,
+        })
 
-        prompt = (
-            "Generate focused, high-quality multiple-choice options based on the user's professional background and "
-            "the intent of the question.\n\n"
-            "Generate options based on the content of the question, ensuring they introduce new elements not already "
-            "included in the resume/CV but relatable to the job title.\n\n"
-            "CONTEXT SUMMARY:\n"
-            f"{context_str}\n\n"
-            "QUESTION:\n"
-            f"{question_text}\n\n"
-            "PARAMETERS:\n"
-            f"{', '.join(parameter_list)}\n\n"
-            "OUTPUT FORMAT (STRICT JSON):\n"
-            "{{\n"
-            "  \"options\": [\"Option 1\", \"Option 2\", ...]\n"
-            "}}\n\n"
-            "REQUIREMENTS:\n"
-            f"- Provide EXACTLY {option_count} options.\n"
-            "- Options must be short, clear (2–5 words), and directly related to the parameters and the question.\n"
-            "- Each option must start with a capital letter.\n"
-            "- No numbering, bullets, special symbols, or prefixes.\n"
-            "- Avoid generic, vague, or repetitive wording.\n"
-        )
+    prompt = (
+        "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
+        "Generate options based on the question content, introducing new elements not already in the CV "
+        "but relatable to the job title.\n\n"
+        "CV CONTEXT:\n"
+        f"{context_str}\n\n"
+        "QUESTIONS (JSON array):\n"
+        f"{json.dumps(questions_payload, indent=2)}\n\n"
+        "OUTPUT RULES:\n"
+        "- Return a JSON object with key \"results\" containing an array.\n"
+        "- One entry per question, same order as input.\n"
+        "- Each entry: {\"id\": <id>, \"options\": [\"...\", ...]}\n"
+        "- Generate EXACTLY the number of options specified in option_count per question.\n"
+        "- Each option: 2–5 words, starts with a capital letter, no numbering or bullets.\n"
+        "- Options must be distinct and relevant.\n"
+        "- Return ONLY valid JSON. No markdown, no explanation.\n"
+    )
 
-        try:
-            response = await _gemini_with_retry(prompt, caller="generate_job_attribute_options")
-            cleaned = clean_llm_json_response(response.text)
-            parsed = json.loads(cleaned)
-            options = parsed.get("options", [])
+    try:
+        logger.info(f"[GEMINI CALL] generate_job_attribute_options | 1 batched call for {len(questions_from_db)} questions")
+        response = await _gemini_with_retry(prompt, caller="generate_job_attribute_options")
+        cleaned = clean_llm_json_response(response.text)
+        parsed = json.loads(cleaned)
+        results_map = {item["id"]: item.get("options", []) for item in parsed.get("results", [])}
+    except Exception as e:
+        logger.error(f"[GEMINI CALL] generate_job_attribute_options | batch failed: {e}")
+        results_map = {}
 
-            formatted_options = []
-            for opt in options:
-                opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())
-                opt = (opt[:1].upper() + opt[1:]) if opt else "Option"
-                formatted_options.append(opt)
+    # ---- Build final results ----
+    results = []
+    for i, q in enumerate(questions_from_db):
+        parameter = q.get("parameter", "")
+        parameter_list = [p.strip() for p in parameter.split(" + ")]
+        option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
+        limit = q.get("limit") or q.get("Limit")
 
-            while len(formatted_options) < option_count:
-                formatted_options.append(f"Option {len(formatted_options) + 1}")
+        raw_options = results_map.get(i, [])
+        formatted_options = []
+        for opt in raw_options:
+            opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())
+            opt = (opt[:1].upper() + opt[1:]) if opt else "Option"
+            formatted_options.append(opt)
+        while len(formatted_options) < option_count:
+            formatted_options.append(f"Option {len(formatted_options) + 1}")
 
-            result_item = {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": qtype,
-                "iconfilename": iconfilename,
-                "options": formatted_options,
-            }
-        except Exception:
-            result_item = {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": qtype,
-                "iconfilename": iconfilename,
-                "options": [f"Option {i+1}" for i in range(option_count)],
-            }
-
+        result_item = {
+            "parameter": parameter_list,
+            "question": q.get("question"),
+            "type": q.get("type"),
+            "iconfilename": q.get("iconfilename"),
+            "options": formatted_options,
+        }
         if limit is not None:
             result_item["limit"] = limit
-        return result_item
+        results.append(result_item)
 
-    logger.info(f"[GEMINI GATHER] generate_job_attribute_options | firing {len(questions_from_db)} calls in parallel")
-    results = await asyncio.gather(*[_fetch_options_for_question(q) for q in questions_from_db])
-    logger.info(f"[GEMINI GATHER] generate_job_attribute_options | all {len(questions_from_db)} calls complete")
-
-    return {
-        "success": True,
-        "suggestions": list(results),
-    }
+    return {"success": True, "suggestions": results}
 
 async def get_latest_user_cv(db, user_id: str):
     """
@@ -1383,85 +1366,73 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     style_noise = ", ".join(style_noise_pool[:3])
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
 
-    async def _fetch_anchor_option(q):
-        parameter = q.get("parameter")
-        if parameter not in target_parameters:
-            return None
+    # ---- Filter to only target questions ----
+    target_questions = [q for q in questions if q.get("parameter") in target_parameters]
 
-        question_text = q.get("question")
-        type_ = q.get("type")
-        iconfilename = q.get("iconfilename")
-        parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = 2 * len(parameter_list)
+    if not target_questions:
+        suggestions = []
+    else:
+        # ---- Build batched payload ----
+        questions_payload = []
+        for i, q in enumerate(target_questions):
+            parameter_list = [p.strip() for p in q.get("parameter", "").split("+")]
+            option_count = 2 * len(parameter_list)
+            questions_payload.append({
+                "id": i,
+                "parameter": ", ".join(parameter_list),
+                "question": q.get("question"),
+                "option_count": option_count,
+            })
 
         variation_instructions = (
-            "- Ensure each execution produces DIFFERENT wording.\n"
-            "- Randomly split, merge, or rephrase phrases from context.\n"
-            "- Introduce synonyms or shuffle words.\n"
-            "- Do NOT invent anything not present in the context.\n"
             f"- Apply variation rules: {style_noise}\n"
+            f"- Variation key (for uniqueness): {variation_key}\n"
         )
 
         prompt = (
             "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
             "Generate options inspired by the user’s Personal Interests, Hobbies, Exploration Interests, "
-            "Motivation Drivers, Motivating Activities, and Achievements—without directly copying their context. "
-            "Infer the user’s underlying nature (e.g., creative, organized, exploratory) and tailor the options "
-            "to reflect that. Ensure the options remain relevant to the user’s job title and aligned with their "
-            "inferred personality and interests.\n\n"
-            "Also generate options based on the content of the question, ensuring they introduce new elements "
-            "that are not already included in the resume/CV but relatable to the job title.\n\n"
-            f"STRICT KNOWLEDGE BASE (use ONLY this content, no invention):\n{combined_context}\n\n"
-            f"Target parameters: {', '.join(parameter_list)}\n"
-            f"Question: {question_text}\n\n"
-            "Instructions:\n"
-            f"- Generate EXACTLY {option_count} options.\n"
-            "- Each option must rephrase or summarize ideas from the context.\n"
-            "- Keep options SHORT (2–5 words).\n"
-            "- Start each option with a CAPITAL letter.\n"
-            "- No numbers, bullets, or labels.\n"
-            "- All options must be distinct.\n"
+            "Motivation Drivers, Motivating Activities, and Achievements. Infer the user’s underlying nature "
+            "(creative, organized, exploratory) and tailor options to reflect that.\n\n"
+            f"KNOWLEDGE BASE (use ONLY this, no invention):\n{combined_context}\n\n"
+            "QUESTIONS:\n"
+            f"{json.dumps(questions_payload, indent=2)}\n\n"
+            "OUTPUT RULES:\n"
+            "- Return a JSON object with key \"results\" containing an array.\n"
+            "- One entry per question, same order as input.\n"
+            "- Each entry: {\"id\": <id>, \"options\": [\"...\", ...]}\n"
+            "- Generate EXACTLY the option_count options per question.\n"
+            "- Each option: 2–5 words, starts with a capital letter, no numbering or bullets.\n"
+            "- Do NOT invent anything not present in the knowledge base.\n"
             f"{variation_instructions}"
-            f"- Variation key: {variation_key}\n\n"
-            "Respond ONLY in JSON format:\n"
-            "{{\n"
-            "  \"options\": [\"<Short phrase 1>\", \"<Short phrase 2>\", ...]\n"
-            "}}\n"
+            "- Return ONLY valid JSON. No markdown, no explanation.\n"
         )
 
         try:
+            logger.info(f"[GEMINI CALL] generate_anchor_attribute_options | 1 batched call for {len(target_questions)} questions")
             response = await _gemini_with_retry(prompt, caller="generate_anchor_attribute_options")
             cleaned = clean_llm_json_response(response.text)
-            parsed_json = json.loads(cleaned)
-            options = parsed_json.get("options", [])
+            parsed_batch = json.loads(cleaned)
+            results_map = {item["id"]: item.get("options", []) for item in parsed_batch.get("results", [])}
+        except Exception as e:
+            logger.error(f"[GEMINI CALL] generate_anchor_attribute_options | batch failed: {e}")
+            results_map = {}
 
-            formatted = []
-            for opt in options[:option_count]:
-                formatted.append(opt.strip().lstrip("0123456789.- ").capitalize())
+        suggestions = []
+        for i, q in enumerate(target_questions):
+            parameter_list = [p.strip() for p in q.get("parameter", "").split("+")]
+            option_count = 2 * len(parameter_list)
+            raw_options = results_map.get(i, [])
+            formatted = [opt.strip().lstrip("0123456789.- ").capitalize() for opt in raw_options[:option_count]]
             while len(formatted) < option_count:
                 formatted.append(f"Option {len(formatted)+1}")
-
-            return {
+            suggestions.append({
                 "parameter": parameter_list,
-                "question": question_text,
-                "type": type_,
-                "iconfilename": iconfilename,
+                "question": q.get("question"),
+                "type": q.get("type"),
+                "iconfilename": q.get("iconfilename"),
                 "options": formatted,
-            }
-        except Exception as e:
-            return {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": type_,
-                "iconfilename": iconfilename,
-                "options": [f"Option {i+1}" for i in range(option_count)],
-                "error": str(e),
-            }
-
-    logger.info(f"[GEMINI GATHER] generate_anchor_attribute_options | firing {len(questions)} calls in parallel")
-    raw = await asyncio.gather(*[_fetch_anchor_option(q) for q in questions])
-    logger.info(f"[GEMINI GATHER] generate_anchor_attribute_options | all {len(questions)} calls complete")
-    suggestions = [r for r in raw if r is not None]
+            })
 
     # ----------------------------------------------------------
     # SAVE RESULTS IN UPLOADS COLLECTION
@@ -1531,67 +1502,65 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
         q for qa_group in questions_for_user for q in qa_group.get("questions", [])
     ]
 
-    async def _fetch_without_cv_option(q):
+    # ---- Build batched payload for single Gemini call ----
+    questions_payload = []
+    for i, q in enumerate(all_questions):
         parameter = q.get("parameter", "")
-        question_text = q.get("question")
-        qtype = q.get("type")
-        iconfilename = q.get("iconfilename")
-        limit = q.get("limit") or q.get("Limit")
-
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
+        questions_payload.append({
+            "id": i,
+            "parameter": ", ".join(parameter_list),
+            "question": q.get("question"),
+            "option_count": option_count,
+        })
 
-        prompt = (
-            "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
-            f"Audience Type: {audience_type}\n\n"
-            f"Missing CV Context:\n{context_str}\n\n"
-            f"Question: {question_text}\n\n"
-            "Respond ONLY in JSON format:\n"
-            "{{\n"
-            "  \"options\": [\n"
-            "    \"<short phrase>\",\n"
-            "    \"<short phrase>\"\n"
-            "  ]\n"
-            "}}\n\n"
-            "RULES:\n"
-            f"- Provide EXACTLY {option_count} concise, distinct options.\n"
-            "- Keep each option 2–5 words long.\n"
-            "- Avoid numbering or letters (no A/B/C/... prefixes).\n"
-            "- Make sure they fit the question meaningfully."
-        )
+    prompt = (
+        "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
+        f"Audience Type: {audience_type}\n\n"
+        f"Missing CV Context:\n{context_str}\n\n"
+        "QUESTIONS:\n"
+        f"{json.dumps(questions_payload, indent=2)}\n\n"
+        "OUTPUT RULES:\n"
+        "- Return a JSON object with key \"results\" containing an array.\n"
+        "- One entry per question, same order as input.\n"
+        "- Each entry: {\"id\": <id>, \"options\": [\"...\", ...]}\n"
+        "- Generate EXACTLY the option_count options per question.\n"
+        "- Each option: 2–5 words, no numbering or letter prefixes.\n"
+        "- Options must be concise, distinct, and fit the question meaningfully.\n"
+        "- Return ONLY valid JSON. No markdown, no explanation.\n"
+    )
 
-        try:
-            response = await _gemini_with_retry(prompt, caller="generate_job_attribute_options_without_cv")
-            cleaned = clean_llm_json_response(response.text)
-            parsed = json.loads(cleaned)
-            options = parsed.get("options", [])
-            formatted_options = [opt.strip() for opt in options[:option_count]]
-            while len(formatted_options) < option_count:
-                formatted_options.append(f"Option {len(formatted_options)+1}")
-            result_item = {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": qtype,
-                "iconfilename": iconfilename,
-                "options": formatted_options,
-            }
-        except Exception as e:
-            print(f"Fallback due to error: {e}")
-            result_item = {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": qtype,
-                "iconfilename": iconfilename,
-                "options": [f"Option {i+1}" for i in range(option_count)],
-            }
+    try:
+        logger.info(f"[GEMINI CALL] generate_job_attribute_options_without_cv | 1 batched call for {len(all_questions)} questions")
+        response = await _gemini_with_retry(prompt, caller="generate_job_attribute_options_without_cv")
+        cleaned = clean_llm_json_response(response.text)
+        parsed_batch = json.loads(cleaned)
+        results_map = {item["id"]: item.get("options", []) for item in parsed_batch.get("results", [])}
+    except Exception as e:
+        logger.error(f"[GEMINI CALL] generate_job_attribute_options_without_cv | batch failed: {e}")
+        results_map = {}
 
+    results = []
+    for i, q in enumerate(all_questions):
+        parameter = q.get("parameter", "")
+        parameter_list = [p.strip() for p in parameter.split("+")]
+        option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
+        limit = q.get("limit") or q.get("Limit")
+        raw_options = results_map.get(i, [])
+        formatted_options = [opt.strip() for opt in raw_options[:option_count]]
+        while len(formatted_options) < option_count:
+            formatted_options.append(f"Option {len(formatted_options)+1}")
+        result_item = {
+            "parameter": parameter_list,
+            "question": q.get("question"),
+            "type": q.get("type"),
+            "iconfilename": q.get("iconfilename"),
+            "options": formatted_options,
+        }
         if limit is not None:
             result_item["limit"] = limit
-        return result_item
-
-    logger.info(f"[GEMINI GATHER] generate_job_attribute_options_without_cv | firing {len(all_questions)} calls in parallel")
-    results = list(await asyncio.gather(*[_fetch_without_cv_option(q) for q in all_questions]))
-    logger.info(f"[GEMINI GATHER] generate_job_attribute_options_without_cv | all {len(all_questions)} calls complete")
+        results.append(result_item)
 
     # Save results
     await proceed_collection.update_one(
@@ -1681,75 +1650,65 @@ async def generate_anchor_options_from_answers_without_cv(
     random.shuffle(style_noise_pool)
     style_noise = ", ".join(style_noise_pool[:3])
 
-    async def _fetch_anchor_without_cv(q):
-        parameter = q.get("parameter")
-        if parameter not in target_parameters:
-            return None
+    # ---- Filter to only target questions ----
+    target_questions = [q for q in questions if q.get("parameter") in target_parameters]
 
-        question_text = q.get("question")
-        type_ = q.get("type")
-        iconfilename = q.get("iconfilename")
-        parameter_list = [p.strip() for p in parameter.split("+")]
-        option_count = OPTIONS_PER_PARAMETER * len(parameter_list)
-
-        variation_instructions = (
-            "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
-            "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
-            "- Introduce synonyms, shuffle word order, or shorten differently.\n"
-            "- Do NOT invent anything that is not explicitly present in the free-text answers.\n"
-            f"- Apply these random variation rules: {style_noise}\n"
-        )
+    if not target_questions:
+        suggestions = []
+    else:
+        # ---- Build batched payload ----
+        questions_payload = []
+        for i, q in enumerate(target_questions):
+            parameter_list = [p.strip() for p in q.get("parameter", "").split("+")]
+            option_count = OPTIONS_PER_PARAMETER * len(parameter_list)
+            questions_payload.append({
+                "id": i,
+                "parameter": ", ".join(parameter_list),
+                "question": q.get("question"),
+                "option_count": option_count,
+            })
 
         prompt = (
             "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
             f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
-            f"Target sub-parameters: {', '.join(parameter_list)}\n"
-            f"Question: {question_text}\n\n"
-            "Instructions:\n"
-            f"- Generate EXACTLY {option_count} short options.\n"
-            "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers.\n"
-            "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
-            "- Keep each option SHORT (2–5 words).\n"
-            f"{variation_instructions}"
-            f"- Variation key (for uniqueness): {variation_key}\n\n"
-            "Respond ONLY in JSON format:\n"
-            "{{\n"
-            "  \"options\": [\n"
-            + ",\n".join(["    \"<short phrase>\"" for _ in range(option_count)])
-            + "\n  ]\n"
-            "}}"
+            "QUESTIONS:\n"
+            f"{json.dumps(questions_payload, indent=2)}\n\n"
+            "OUTPUT RULES:\n"
+            "- Return a JSON object with key \"results\" containing an array.\n"
+            "- One entry per question, same order as input.\n"
+            "- Each entry: {\"id\": <id>, \"options\": [\"...\", ...]}\n"
+            "- Generate EXACTLY the option_count options per question.\n"
+            "- Each option must directly rephrase, split, or summarize the knowledge base.\n"
+            "- DO NOT invent anything not present in the knowledge base.\n"
+            "- Keep options SHORT (2–5 words), starting with a capital letter.\n"
+            f"- Apply variation rules: {style_noise}\n"
+            f"- Variation key: {variation_key}\n"
+            "- Return ONLY valid JSON. No markdown, no explanation.\n"
         )
 
         try:
+            logger.info(f"[GEMINI CALL] generate_anchor_options_from_answers_without_cv | 1 batched call for {len(target_questions)} questions")
             response = await _gemini_with_retry(prompt, caller="generate_anchor_options_from_answers_without_cv")
             cleaned = clean_llm_json_response(response.text)
-            parsed = json.loads(cleaned)
-            options = parsed.get("options", [])
-            formatted = [
-                options[i].strip() if i < len(options) else f"Option {i+1}"
-                for i in range(option_count)
-            ]
-            return {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": type_,
-                "iconfilename": iconfilename,
-                "options": formatted,
-            }
+            parsed_batch = json.loads(cleaned)
+            results_map = {item["id"]: item.get("options", []) for item in parsed_batch.get("results", [])}
         except Exception as e:
-            return {
-                "parameter": parameter_list,
-                "question": question_text,
-                "type": type_,
-                "iconfilename": iconfilename,
-                "options": [f"Option {i+1}" for i in range(option_count)],
-                "error": str(e),
-            }
+            logger.error(f"[GEMINI CALL] generate_anchor_options_from_answers_without_cv | batch failed: {e}")
+            results_map = {}
 
-    logger.info(f"[GEMINI GATHER] generate_anchor_options_from_answers_without_cv | firing {len(questions)} calls in parallel")
-    raw = await asyncio.gather(*[_fetch_anchor_without_cv(q) for q in questions])
-    logger.info(f"[GEMINI GATHER] generate_anchor_options_from_answers_without_cv | all {len(questions)} calls complete")
-    suggestions = [r for r in raw if r is not None]
+        suggestions = []
+        for i, q in enumerate(target_questions):
+            parameter_list = [p.strip() for p in q.get("parameter", "").split("+")]
+            option_count = OPTIONS_PER_PARAMETER * len(parameter_list)
+            raw_options = results_map.get(i, [])
+            formatted = [raw_options[j].strip() if j < len(raw_options) else f"Option {j+1}" for j in range(option_count)]
+            suggestions.append({
+                "parameter": parameter_list,
+                "question": q.get("question"),
+                "type": q.get("type"),
+                "iconfilename": q.get("iconfilename"),
+                "options": formatted,
+            })
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
         {"$set": {"anchor_questions_with_options": suggestions}},

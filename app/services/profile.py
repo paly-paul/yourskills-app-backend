@@ -183,69 +183,46 @@ async def get_audience_questions_service(db, current_user):
             detail="No CV data found for this user"
         )
 
-    # -------------------------------
-    # PRIORITY:
-    # selected audience type
-    # fallback -> extracted audience type
-    # -------------------------------
-
     audience_type = (
         latest_cv.get("selectedAudienceType")
         or latest_cv.get("audienceType")
     )
 
+    # Return cached questions if already generated during extract-cv
+    cached = latest_cv.get("job_questions_with_options")
+    if cached:
+        return {
+            "success": True,
+            "audienceType": audience_type,
+            "questions": cached,
+        }
+
+    # Cache miss — generate once and save
     parsed_data = latest_cv.get("parsed_data", {})
-
-    # -------------------------------
-    # FETCH QUESTIONS JSON
-    # -------------------------------
-
     questions_doc = await questions_collection.find_one({})
-
     if not questions_doc:
-        raise HTTPException(
-            status_code=404,
-            detail="Questions configuration not found"
-        )
+        raise HTTPException(status_code=404, detail="Questions configuration not found")
 
     job_attributes = questions_doc.get("Job attributes", [])
-
     matching_job = next(
-        (
-            item for item in job_attributes
-            if item.get("audienceType") == audience_type
-        ),
+        (item for item in job_attributes if item.get("audienceType") == audience_type),
         None
     )
-
     if not matching_job:
         raise HTTPException(
             status_code=404,
             detail=f"No questions found for audience type: {audience_type}"
         )
 
-    # -------------------------------
-    # GENERATE OPTIONS DYNAMICALLY
-    # -------------------------------
-
-    job_questions = matching_job.get("questions", [])
-
     job_options = await generate_job_attribute_options(
         parsed_data,
-        job_questions
+        matching_job.get("questions", [])
     )
-
     questions = job_options.get("suggestions", [])
 
-    # OPTIONAL:
-    # save regenerated questions
     await uploads_collection.update_one(
         {"_id": latest_cv["_id"]},
-        {
-            "$set": {
-                "job_questions_with_options": questions
-            }
-        }
+        {"$set": {"job_questions_with_options": questions}}
     )
 
     return {
