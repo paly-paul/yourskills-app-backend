@@ -3,17 +3,18 @@ from app.db.database import get_database
 from app.schemas import UserCreate, UserLogin, ForgotPasswordRequest, AnswersSubmit, ResetPasswordRequest
 from app.schemas.user import GoogleAuthRequest
 from app.services.user import create_user, get_user_by_email, forgot_password, reset_password_with_otp, save_extracted_cv_data, save_latest_cv_answers, save_answers_without_cv, create_google_user
-from app.utils import verify_password
+from app.utils import verify_password, hash_password
 from app.utils.cv_extractor import extract_cv_data_from_file, predict_audience_type, generate_missing_field_suggestions
 from app.utils.token import create_access_token, get_current_user
 from app.services.cv_comparison import get_cv_summary
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import tempfile
 from bson import ObjectId
-import os
-import google.generativeai as genai
 import asyncio
 import json
+import logging
+import re
+import time
 from datetime import datetime
 from dateutil import parser as date_parser
 from pymongo import DESCENDING
@@ -22,44 +23,30 @@ from app.services.profile import (
     get_missing_field_questions_service,
     get_audience_questions_service,
     get_audience_questions_service_without_cv,
-    get_questions_excluding_parameters, get_questions_by_parameters,get_questions_by_parameters_withoutcv,
+    get_questions_excluding_parameters, get_questions_by_parameters, get_questions_by_parameters_withoutcv,
     get_remaining_anchor_questions_without_cv
 )
 from app.utils.cv_extractor import generate_job_attribute_options
-import re
 from app.schemas.user import EditProfileRequest
-from app.utils import verify_password, hash_password
-from app.schemas.user import EditProfileRequest
-
-import os
-import logging
-import time
+from app.core.gemini import model as gemini_model
 import google.generativeai as genai
-from dotenv import load_dotenv
 
 logger = logging.getLogger("gemini")
-
-load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-gemini_model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 def get_llm_model():
     return gemini_model
 
 
 async def _gemini_sync_with_retry(contents, generation_config, max_retries: int = 4):
-    """Run synchronous generate_content in a thread with exponential backoff on 429."""
-    import asyncio as _asyncio
     delay = 2.0
     for attempt in range(max_retries):
         t0 = time.time()
         try:
             logger.info(f"[GEMINI CALL] caller=summary/model | attempt={attempt+1}")
-            response = await _asyncio.to_thread(
-                gemini_model.generate_content,
-                contents=contents,
+            response = await gemini_model.generate_content_async(
+                contents,
                 generation_config=generation_config,
+                request_options={"timeout": 60},
             )
             logger.info(f"[GEMINI CALL] caller=summary/model | SUCCESS | attempt={attempt+1} | time={round(time.time()-t0,2)}s")
             return response
@@ -68,7 +55,7 @@ async def _gemini_sync_with_retry(contents, generation_config, max_retries: int 
             is_rate_limit = "429" in err or "ResourceExhausted" in err or "quota" in err.lower()
             if is_rate_limit and attempt < max_retries - 1:
                 logger.warning(f"[GEMINI CALL] caller=summary/model | RATE LIMIT | attempt={attempt+1} | retrying in {delay}s")
-                await _asyncio.sleep(delay)
+                await asyncio.sleep(delay)
                 delay *= 2
                 continue
             logger.error(f"[GEMINI CALL] caller=summary/model | FAILED | attempt={attempt+1} | time={round(time.time()-t0,2)}s | error={err[:200]}")
@@ -227,7 +214,7 @@ async def extract_cv(
 
     try:
         # ---------------- EXTRACT RESUME DATA ----------------
-        data = await asyncio.to_thread(extract_cv_data_from_file, tmp_path, file.content_type)
+        data = await extract_cv_data_from_file(tmp_path, file.content_type)
     finally:
         os.unlink(tmp_path)
 
@@ -1235,168 +1222,11 @@ async def get_cv_summary_without(
 #-------------------------------------Api for Model prediction Data ------------------------------------------------------------------------------
 
 @router.get("/cv/profile-data")
-async def get_cv_profile_data(
+async def get_cv_profile_data_route(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(get_current_user)
 ):
-    uploads_collection = db["uploads"]
-    answers_collection = db["answers"]
-    answers_without_cv_collection = db["answers_without_cv"]
-    proceed_without_cv_collection = db["proceed_without_cv"]
-
-    user_id = str(current_user.get("_id"))
-    query = {"user_id": {"$in": [user_id, ObjectId(user_id)]}}
-
-    latest_cv_doc = await uploads_collection.find_one(
-        query, sort=[("uploaded_at", DESCENDING)]
-    )
-    latest_no_cv_doc = await proceed_without_cv_collection.find_one(
-        {"user_id": user_id}, sort=[("created_at", DESCENDING)]
-    )
-    latest_cv_time = latest_cv_doc.get("uploaded_at") if latest_cv_doc else None
-    latest_no_cv_time = latest_no_cv_doc.get("created_at") if latest_no_cv_doc else None
-
-    active_flow = "without_cv"
-    has_cv = False
-    parsed_data = {}
-    active_answers_collection = answers_without_cv_collection
-    reference_id = None
-
-    if latest_cv_time and (not latest_no_cv_time or latest_cv_time > latest_no_cv_time):
-        active_flow = "with_cv"
-        has_cv = True
-        parsed_data = latest_cv_doc.get("parsed_data", {})
-        active_answers_collection = answers_collection
-        reference_id = str(latest_cv_doc.get("_id"))
-    else:
-        reference_id = str(latest_no_cv_doc.get("_id")) if latest_no_cv_doc else None
-
-    talent_info = {
-        "Education": parsed_data.get("Education", []),
-        "Internships": parsed_data.get("Internships", []),
-        "Projects": parsed_data.get("Projects", []),
-        "Experience": parsed_data.get("WorkExperience", []),
-        "Core Tasks": "",
-        "Supplementary Tasks": "",
-        "Emerging Tasks": "",
-        "Knowledge": "",
-        "Skills": "",
-        "Core Tasks": "",
-        "Supplementary Tasks": "",
-        "Emerging Tasks": "",
-        "Knowledge": "",
-        "Skills": "",
-        "Work activities": "",
-        "Work styles": "",
-        "Work values": "",
-        "Technical Skills": parsed_data.get("Skills", {}).get("HardSkills", []),
-        "Hot Technologies": "",
-        "Soft Skills": parsed_data.get("Skills", {}).get("SoftSkills", []),
-        "Functional Skills": "",
-        "Certifications": parsed_data.get("Certifications", []),
-        "Salary grades": "",
-        "Career Objective": parsed_data.get("Summary") if has_cv else "",
-        "Career Interest Areas": ""
-    }
-
-    anchor_attrs = {
-        "Achievements": "",
-        "Behavioral Skills": "",
-        "Interests": "",
-        "Competency": "",
-        "Cognitive Preferences": "",
-        "Creative Inclinations": "",
-        "Exploration Interest": "",
-        "Future study intent": "",
-        "Cultural Exposure": "",
-        "Emerging Tech Awareness": "",
-        "Hobbies": "",
-        "Learning Agility": "",
-        "Life Skills": "",
-        "Motivation Drivers": "",
-        "Motivating Activities": "",
-        "Newly Acquired Skills": "",
-        "Organizational Skills": "",
-        "Personal Interests": "",
-        "Social Causes": "",
-        "Volunteering": "",
-        "Personality Traits": ""
-    }
-
-    async def fetch_answer(parameter: str, section: str):
-        query_filter = {
-            "user_id": user_id,
-            "section": section,
-            "parameter": {"$regex": f".*{parameter}.*", "$options": "i"},
-        }
-        if has_cv:
-            query_filter["cv_id"] = reference_id
-        else:
-            query_filter["document_id"] = reference_id
-
-        ans_doc = await active_answers_collection.find_one(
-            query_filter, sort=[("created_at", DESCENDING)]
-        )
-        if not ans_doc:
-            return None
-        VALUE_ONLY_FIELDS = [
-            "Core Tasks",
-            "Supplementary Tasks",
-            "Emerging Tasks",
-            "Knowledge",
-            "Skills",
-        ]
-
-        if parameter.lower() == "achievements":
-            value_obj = ans_doc.get("value", {})
-            if isinstance(value_obj, dict):
-                return value_obj.get("text") or value_obj.get("selected")
-            return None
-
-        if parameter in VALUE_ONLY_FIELDS:
-            return ans_doc.get("value")
-        return (
-            ans_doc.get("free_text")
-            or ans_doc.get("selected_options")
-            or ans_doc.get("value")
-        )
-
-    for field, value in talent_info.items():
-        db_field_name = "Career Interests" if field == "Career Interest Areas" else field
-
-        needs_fetch = (
-            field == "Career Interest Areas"
-            or not value
-            or value in ["", [], None]
-        )
-
-        if needs_fetch:
-            if has_cv:
-                answer_val = await fetch_answer(db_field_name, "Cv Missing")
-                if not answer_val:
-                    answer_val = await fetch_answer(db_field_name, "Job Attributes")
-            else:
-                answer_val = await fetch_answer(db_field_name, "Cv Missing")
-                if not answer_val:
-                    answer_val = await fetch_answer(db_field_name, "Job Attributes")
-
-            if answer_val:
-                talent_info[field] = answer_val
-
-    for field in anchor_attrs:
-        answer_val = await fetch_answer(field, "Anchor Attributes")
-        if answer_val:
-            anchor_attrs[field] = answer_val
-
-    return {
-        "success": True,
-        "flow": active_flow,
-        "cv_id_or_document_id": reference_id,
-        "latest_cv_uploaded_at": latest_cv_time,
-        "latest_without_cv_created_at": latest_no_cv_time,
-        "Talent Information": talent_info,
-        "Anchor Attributes": anchor_attrs,
-    }
+    return await get_cv_profile_data(db, current_user)
 
 
 # ---------------------------------------- Extraction without auth ---------------------------------------
@@ -1417,7 +1247,7 @@ async def extract_cv_no_auth(
         tmp_path = tmp.name
 
     try:
-        data = await asyncio.to_thread(extract_cv_data_from_file, tmp_path, file.content_type)
+        data = await extract_cv_data_from_file(tmp_path, file.content_type)
     finally:
         os.unlink(tmp_path)
 
@@ -1434,21 +1264,19 @@ async def extract_cv_no_auth(
     )
     cv_id_str = str(saved_cv.get("_id"))
 
-    softskills_suggestions, technical_skills_suggestions = [], []
-    if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
-        try:
-            suggestions = await generate_missing_field_suggestions(data)
-        except Exception:
-            suggestions = {"softskills_suggestions": [], "technical_skills_suggestions": []}
-
-        softskills_suggestions = suggestions.get("softskills_suggestions", [])
-        technical_skills_suggestions = suggestions.get("technical_skills_suggestions", [])
+    # Read LLM-generated suggestions directly from parsed data — no extra Gemini call needed
+    softskills_suggestions = data.get("LLM_Generated_Soft_Skills", [])
+    technical_skills_suggestions = data.get("LLM_Generated_Technical_Skills", [])
+    certifications_suggestions = [
+        cert.get("Name") for cert in data.get("LLM_Generated_Certificates", [])
+    ]
 
     await save_skill_suggestions(
         user_id=str(dummy_user_id),
         cv_id=cv_id_str,
         softskills=softskills_suggestions,
         technical_skills=technical_skills_suggestions,
+        certifications=certifications_suggestions,
         db=db
     )
     questions_collection = db["questions"]
@@ -1754,12 +1582,15 @@ async def extract_cv_summary(
 
     cv_data = await get_cv_profile_data(db, current_user)
 
+    def _filter_nonempty(d: dict) -> dict:
+        return {k: v for k, v in d.items() if v not in ("", None, [], {})}
+
     parsed_resume = {
-        "Talent Information": cv_data.get("Talent Information", {}),
-        "Anchor Attributes": cv_data.get("Anchor Attributes", {})
+        "Talent Information": _filter_nonempty(cv_data.get("Talent Information", {})),
+        "Anchor Attributes": _filter_nonempty(cv_data.get("Anchor Attributes", {})),
     }
 
-    # Handling key mapping consistency for Gemini prompt
+    # Normalize keys for Gemini prompt
     key_map = {
         "Behavioral Skills": "Behavioural Skills",
         "Social Causes": "Social Cause",
@@ -1882,12 +1713,6 @@ Input JSON:
             return keyword or "Not specified"
             
         return "Not specified"
-
-    for main_key in extracted_data:
-        for sub_key in extracted_data[main_key]:
-            for field, value in extracted_data[main_key][sub_key].items():
-                
-                extracted_data[main_key][sub_key][field] = safe_keyword(value)
 
     for main_key in extracted_data:
         for sub_key in extracted_data[main_key]:
