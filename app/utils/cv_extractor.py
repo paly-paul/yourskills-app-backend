@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import pathlib
@@ -7,13 +8,11 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from docx import Document
 import re
-from typing import Dict, List, Tuple,Any
+from typing import Dict, List, Tuple, Any
 from collections import defaultdict
 from app.db.database import get_database
 import random
-import json
 import uuid
-from datetime import datetime
 from fastapi import HTTPException
 from bson import ObjectId
 
@@ -21,7 +20,23 @@ from bson import ObjectId
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
-print(os.getenv("GEMINI_API_KEY"))
+
+
+
+async def _gemini_with_retry(prompt, max_retries: int = 4):
+    """Call Gemini with exponential backoff on rate-limit (429) errors."""
+    delay = 2.0
+    for attempt in range(max_retries):
+        try:
+            return await _gemini_with_retry(prompt)
+        except Exception as exc:
+            err = str(exc)
+            is_rate_limit = "429" in err or "ResourceExhausted" in err or "quota" in err.lower()
+            if is_rate_limit and attempt < max_retries - 1:
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            raise
 
 def parse_duration(duration_str):
     try:
@@ -905,7 +920,7 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         "5. **Format Reference for Skills:** For 'SoftSkills' and 'HardSkills', provide single-word or short-phrase skills. Example: 'Python', 'Leadership', 'Data Analysis'."
     )
 
-    response = await model.generate_content_async(prompt)
+    response = await _gemini_with_retry(prompt)
     cleaned = clean_llm_json_response(response.text)
 
     try:
@@ -999,8 +1014,6 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         f"{k}: {v}" for k, v in filtered_context.items() if v
     )
 
-    results = []
-
     # ---- Audience filter ----
     audience_type = cv_context.get("audience_type") or cv_context.get("audience")
 
@@ -1010,10 +1023,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             if not q.get("audience") or q.get("audience") == audience_type
         ]
 
-    # ----------------------------------------------------
-    # PROCESS EACH QUESTION
-    # ----------------------------------------------------
-    for q in questions_from_db:
+    async def _fetch_options_for_question(q):
         parameter = q.get("parameter", "")
         question_text = q.get("question")
         qtype = q.get("type")
@@ -1021,7 +1031,6 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         limit = q.get("limit") or q.get("Limit")
 
         parameter_list = [p.strip() for p in parameter.split(" + ")]
-
         option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
 
         prompt = (
@@ -1036,9 +1045,9 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             "PARAMETERS:\n"
             f"{', '.join(parameter_list)}\n\n"
             "OUTPUT FORMAT (STRICT JSON):\n"
-            "{\n"
+            "{{\n"
             "  \"options\": [\"Option 1\", \"Option 2\", ...]\n"
-            "}\n\n"
+            "}}\n\n"
             "REQUIREMENTS:\n"
             f"- Provide EXACTLY {option_count} options.\n"
             "- Options must be short, clear (2–5 words), and directly related to the parameters and the question.\n"
@@ -1047,25 +1056,18 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             "- Avoid generic, vague, or repetitive wording.\n"
         )
 
-
-
         try:
-            response = await model.generate_content_async(prompt)
+            response = await _gemini_with_retry(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
 
-            # Fix formatting
             formatted_options = []
             for opt in options:
                 opt = re.sub(r"^[^A-Za-z]+", "", opt.strip())
-                if opt:
-                    opt = opt[:1].upper() + opt[1:]
-                else:
-                    opt = "Option"
+                opt = (opt[:1].upper() + opt[1:]) if opt else "Option"
                 formatted_options.append(opt)
 
-            # Pad missing
             while len(formatted_options) < option_count:
                 formatted_options.append(f"Option {len(formatted_options) + 1}")
 
@@ -1074,30 +1076,26 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
                 "question": question_text,
                 "type": qtype,
                 "iconfilename": iconfilename,
-                "options": formatted_options
+                "options": formatted_options,
             }
-            if limit is not None:
-                result_item["limit"] = limit
-
-            results.append(result_item)
-
         except Exception:
-            fallback = [f"Option {i+1}" for i in range(option_count)]
             result_item = {
                 "parameter": parameter_list,
                 "question": question_text,
                 "type": qtype,
                 "iconfilename": iconfilename,
-                "options": fallback
+                "options": [f"Option {i+1}" for i in range(option_count)],
             }
-            if limit is not None:
-                result_item["limit"] = limit
 
-            results.append(result_item)
+        if limit is not None:
+            result_item["limit"] = limit
+        return result_item
+
+    results = await asyncio.gather(*[_fetch_options_for_question(q) for q in questions_from_db])
 
     return {
         "success": True,
-        "suggestions": results
+        "suggestions": list(results),
     }
 
 async def get_latest_user_cv(db, user_id: str):
@@ -1220,7 +1218,7 @@ async def get_latest_user_cv(db, user_id: str):
 #         )
 
 #         try:
-#             response = await model.generate_content_async(prompt)
+#             response = await _gemini_with_retry(prompt)
 #             cleaned = clean_llm_json_response(response.text)
 #             parsed = json.loads(cleaned)
 #             options = parsed.get("options", [])
@@ -1365,23 +1363,15 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     style_noise = ", ".join(style_noise_pool[:3])
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
 
-    suggestions = []
-
-    # ----------------------------------------------------------
-    # LOOP OVER QUESTIONS
-    # ----------------------------------------------------------
-    for q in questions:
+    async def _fetch_anchor_option(q):
         parameter = q.get("parameter")
         if parameter not in target_parameters:
-            continue
+            return None
 
         question_text = q.get("question")
         type_ = q.get("type")
         iconfilename = q.get("iconfilename")
-
         parameter_list = [p.strip() for p in parameter.split("+")]
-
-        # Each param → 2 options
         option_count = 2 * len(parameter_list)
 
         variation_instructions = (
@@ -1392,9 +1382,6 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             f"- Apply variation rules: {style_noise}\n"
         )
 
-        # ------------------------------------------------------
-        # FINAL PROMPT (INCLUDES RESUME DATA)
-        # ------------------------------------------------------
         prompt = (
             "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
             "Generate options inspired by the user’s Personal Interests, Hobbies, Exploration Interests, "
@@ -1405,7 +1392,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             "Also generate options based on the content of the question, ensuring they introduce new elements "
             "that are not already included in the resume/CV but relatable to the job title.\n\n"
             f"STRICT KNOWLEDGE BASE (use ONLY this content, no invention):\n{combined_context}\n\n"
-            f"Target parameters: {', '.join(parameter_list)}\n"
+            f"Target parameters: {‘, ‘.join(parameter_list)}\n"
             f"Question: {question_text}\n\n"
             "Instructions:\n"
             f"- Generate EXACTLY {option_count} options.\n"
@@ -1417,48 +1404,42 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             f"{variation_instructions}"
             f"- Variation key: {variation_key}\n\n"
             "Respond ONLY in JSON format:\n"
-            "{\n"
+            "{{\n"
             "  \"options\": [\"<Short phrase 1>\", \"<Short phrase 2>\", ...]\n"
-            "}\n"
+            "}}\n"
         )
 
-
-        # ------------------------------------------------------
-        # CALL LLM
-        # ------------------------------------------------------
         try:
-            response = await model.generate_content_async(prompt)
+            response = await _gemini_with_retry(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed_json = json.loads(cleaned)
             options = parsed_json.get("options", [])
 
             formatted = []
             for opt in options[:option_count]:
-                cleaned_opt = opt.strip().lstrip("0123456789.- ").capitalize()
-                formatted.append(cleaned_opt)
-
-            # Pad if fewer options returned
+                formatted.append(opt.strip().lstrip("0123456789.- ").capitalize())
             while len(formatted) < option_count:
                 formatted.append(f"Option {len(formatted)+1}")
 
-            suggestions.append({
+            return {
                 "parameter": parameter_list,
                 "question": question_text,
                 "type": type_,
                 "iconfilename": iconfilename,
-                "options": formatted
-            })
-
+                "options": formatted,
+            }
         except Exception as e:
-            # Fallback options
-            suggestions.append({
+            return {
                 "parameter": parameter_list,
                 "question": question_text,
                 "type": type_,
                 "iconfilename": iconfilename,
                 "options": [f"Option {i+1}" for i in range(option_count)],
-                "error": str(e)
-            })
+                "error": str(e),
+            }
+
+    raw = await asyncio.gather(*[_fetch_anchor_option(q) for q in questions])
+    suggestions = [r for r in raw if r is not None]
 
     # ----------------------------------------------------------
     # SAVE RESULTS IN UPLOADS COLLECTION
@@ -1524,81 +1505,69 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
             status_code=404, detail=f"No questions found for audienceType {audience_type}"
         )
 
-    results = []
+    all_questions = [
+        q for qa_group in questions_for_user for q in qa_group.get("questions", [])
+    ]
 
-    for qa_group in questions_for_user:
-        for q in qa_group.get("questions", []):
-            parameter = q.get("parameter", "")
-            question_text = q.get("question")
-            qtype = q.get("type")
-            iconfilename = q.get("iconfilename")
-            limit = q.get("limit") or q.get("Limit")
+    async def _fetch_without_cv_option(q):
+        parameter = q.get("parameter", "")
+        question_text = q.get("question")
+        qtype = q.get("type")
+        iconfilename = q.get("iconfilename")
+        limit = q.get("limit") or q.get("Limit")
 
-            parameter_list = [p.strip() for p in parameter.split("+")]
+        parameter_list = [p.strip() for p in parameter.split("+")]
+        option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
 
-            # Option count logic
-            if len(parameter_list) == 1:
-                option_count = 5
-            else:
-                option_count = 2 * len(parameter_list)
+        prompt = (
+            "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
+            f"Audience Type: {audience_type}\n\n"
+            f"Missing CV Context:\n{context_str}\n\n"
+            f"Question: {question_text}\n\n"
+            "Respond ONLY in JSON format:\n"
+            "{{\n"
+            "  \"options\": [\n"
+            "    \"<short phrase>\",\n"
+            "    \"<short phrase>\"\n"
+            "  ]\n"
+            "}}\n\n"
+            "RULES:\n"
+            f"- Provide EXACTLY {option_count} concise, distinct options.\n"
+            "- Keep each option 2–5 words long.\n"
+            "- Avoid numbering or letters (no A/B/C/... prefixes).\n"
+            "- Make sure they fit the question meaningfully."
+        )
 
-            # Build prompt (no A,B,C labels)
-            prompt = (
-                "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
-                f"Audience Type: {audience_type}\n\n"
-                f"Missing CV Context:\n{context_str}\n\n"
-                f"Question: {question_text}\n\n"
-                "Respond ONLY in JSON format:\n"
-                "{\n"
-                "  \"options\": [\n"
-                "    \"<short phrase>\",\n"
-                "    \"<short phrase>\"\n"
-                "  ]\n"
-                "}\n\n"
-                "RULES:\n"
-                f"- Provide EXACTLY {option_count} concise, distinct options.\n"
-                "- Keep each option 2–5 words long.\n"
-                "- Avoid numbering or letters (no A/B/C/... prefixes).\n"
-                "- Make sure they fit the question meaningfully."
-            )
+        try:
+            response = await _gemini_with_retry(prompt)
+            cleaned = clean_llm_json_response(response.text)
+            parsed = json.loads(cleaned)
+            options = parsed.get("options", [])
+            formatted_options = [opt.strip() for opt in options[:option_count]]
+            while len(formatted_options) < option_count:
+                formatted_options.append(f"Option {len(formatted_options)+1}")
+            result_item = {
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": qtype,
+                "iconfilename": iconfilename,
+                "options": formatted_options,
+            }
+        except Exception as e:
+            print(f"Fallback due to error: {e}")
+            result_item = {
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": qtype,
+                "iconfilename": iconfilename,
+                "options": [f"Option {i+1}" for i in range(option_count)],
+            }
 
-            try:
-                response = await model.generate_content_async(prompt)
-                cleaned = clean_llm_json_response(response.text)
-                parsed = json.loads(cleaned)
+        if limit is not None:
+            result_item["limit"] = limit
+        return result_item
 
-                options = parsed.get("options", [])
-                # Ensure correct count and clean formatting
-                formatted_options = [
-                    opt.strip() for opt in options[:option_count]
-                ]
-                while len(formatted_options) < option_count:
-                    formatted_options.append(f"Option {len(formatted_options)+1}")
-
-                result_item = {
-                    "parameter": parameter_list,
-                    "question": question_text,
-                    "type": qtype,
-                    "iconfilename": iconfilename,
-                    "options": formatted_options,
-                }
-                if limit is not None:
-                    result_item["limit"] = limit
-
-                results.append(result_item)
-
-            except Exception as e:
-                print(f"⚠️ Fallback due to error: {e}")
-                result_item = {
-                    "parameter": parameter_list,
-                    "question": question_text,
-                    "type": qtype,
-                    "iconfilename": iconfilename,
-                    "options": [f"Option {i+1}" for i in range(option_count)],
-                }
-                if limit is not None:
-                    result_item["limit"] = limit
-                results.append(result_item)
+    results = list(await asyncio.gather(*[_fetch_without_cv_option(q) for q in all_questions]))
 
     # Save results
     await proceed_collection.update_one(
@@ -1632,7 +1601,7 @@ async def generate_anchor_options_from_answers_without_cv(
         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent",
     }
 
-    db = get_database()
+    db = await get_database()
     latest_proceed = await db["proceed_without_cv"].find(
         {"user_id": user_id}
     ).sort("created_at", -1).to_list(length=1)
@@ -1688,17 +1657,14 @@ async def generate_anchor_options_from_answers_without_cv(
     random.shuffle(style_noise_pool)
     style_noise = ", ".join(style_noise_pool[:3])
 
-    suggestions = []
-
-    for q in questions:
+    async def _fetch_anchor_without_cv(q):
         parameter = q.get("parameter")
         if parameter not in target_parameters:
-            continue
+            return None
 
         question_text = q.get("question")
         type_ = q.get("type")
         iconfilename = q.get("iconfilename")
-
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = OPTIONS_PER_PARAMETER * len(parameter_list)
 
@@ -1723,45 +1689,41 @@ async def generate_anchor_options_from_answers_without_cv(
             f"{variation_instructions}"
             f"- Variation key (for uniqueness): {variation_key}\n\n"
             "Respond ONLY in JSON format:\n"
-            "{\n"
+            "{{\n"
             "  \"options\": [\n"
-            + ",\n".join([f"    \"<short phrase>\"" for _ in range(option_count)])
+            + ",\n".join(["    \"<short phrase>\"" for _ in range(option_count)])
             + "\n  ]\n"
-            "}"
+            "}}"
         )
 
         try:
-            response = await model.generate_content_async(prompt)
+            response = await _gemini_with_retry(prompt)
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
-
-            formatted = []
-            for i in range(option_count):
-                opt = options[i].strip() if i < len(options) else f"Option {i+1}"
-                formatted.append(opt)
-
-            suggestions.append(
-                {
-                    "parameter": parameter_list,
-                    "question": question_text,
-                    "type": type_,
-                    "iconfilename": iconfilename,
-                    "options": formatted,
-                }
-            )
-
+            formatted = [
+                options[i].strip() if i < len(options) else f"Option {i+1}"
+                for i in range(option_count)
+            ]
+            return {
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": type_,
+                "iconfilename": iconfilename,
+                "options": formatted,
+            }
         except Exception as e:
-            suggestions.append(
-                {
-                    "parameter": parameter_list,
-                    "question": question_text,
-                    "type": type_,
-                    "iconfilename": iconfilename,
-                    "options": [f"Option {i+1}" for i in range(option_count)],
-                    "error": str(e),
-                }
-            )
+            return {
+                "parameter": parameter_list,
+                "question": question_text,
+                "type": type_,
+                "iconfilename": iconfilename,
+                "options": [f"Option {i+1}" for i in range(option_count)],
+                "error": str(e),
+            }
+
+    raw = await asyncio.gather(*[_fetch_anchor_without_cv(q) for q in questions])
+    suggestions = [r for r in raw if r is not None]
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
         {"$set": {"anchor_questions_with_options": suggestions}},

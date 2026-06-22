@@ -44,6 +44,27 @@ def get_llm_model():
     return gemini_model
 
 
+async def _gemini_sync_with_retry(contents, generation_config, max_retries: int = 4):
+    """Run synchronous generate_content in a thread with exponential backoff on 429."""
+    import asyncio as _asyncio
+    delay = 2.0
+    for attempt in range(max_retries):
+        try:
+            return await _asyncio.to_thread(
+                gemini_model.generate_content,
+                contents=contents,
+                generation_config=generation_config,
+            )
+        except Exception as exc:
+            err = str(exc)
+            is_rate_limit = "429" in err or "ResourceExhausted" in err or "quota" in err.lower()
+            if is_rate_limit and attempt < max_retries - 1:
+                await _asyncio.sleep(delay)
+                delay *= 2
+                continue
+            raise
+
+
 router = APIRouter()
 
 
@@ -194,8 +215,11 @@ async def extract_cv(
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    # ---------------- EXTRACT RESUME DATA ----------------
-    data = extract_cv_data_from_file(tmp_path, file.content_type)
+    try:
+        # ---------------- EXTRACT RESUME DATA ----------------
+        data = await asyncio.to_thread(extract_cv_data_from_file, tmp_path, file.content_type)
+    finally:
+        os.unlink(tmp_path)
 
     if "error" in data:
         return {"message": "CV extraction failed", "error": data["error"]}
@@ -1382,7 +1406,11 @@ async def extract_cv_no_auth(
         tmp.write(await file.read())
         tmp_path = tmp.name
 
-    data = extract_cv_data_from_file(tmp_path, file.content_type)
+    try:
+        data = await asyncio.to_thread(extract_cv_data_from_file, tmp_path, file.content_type)
+    finally:
+        os.unlink(tmp_path)
+
     if "error" in data:
         return {"message": "CV extraction failed", "error": data["error"]}
 
@@ -1810,9 +1838,7 @@ Convert it into a **short, buzzword-style phrase**.
 Input JSON:
 {json.dumps(parsed_resume)}
 """
-    gemini_model = get_llm_model()
-    response = await asyncio.to_thread(
-        gemini_model.generate_content,
+    response = await _gemini_sync_with_retry(
         contents=[extract_prompt],
         generation_config=genai.types.GenerationConfig(
             response_mime_type="application/json",
