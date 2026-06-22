@@ -11,257 +11,66 @@ import json
 # CV EXTRACTION
 # ---------------------------------------------------------------------------
 
+# The instructions are kept minimal; the JSON schema IS the spec.
+# ~200 instruction tokens + ~480 schema tokens = ~680 total (was 1082).
 CV_EXTRACTION_PROMPT = """\
-You are a Senior HR Recruitment, Talent Analyst, and Skill Intelligence Expert trained to extract accurate structured information from resumes, profiles, or people data.
+Extract structured resume data into the JSON schema below. Return ONLY valid JSON.
 
-Your task:
-Read the documents/data and return a CLEAN, VALID JSON object following the exact schema below.
-Use your HR experience to extract and interpret information correctly.
-Do NOT delete, modify, rename, or reorder existing keys.
-You may ONLY add the additional keys provided at the bottom.
-If information is missing, return "Not specified".
-Return ONLY valid JSON. No commentary, no markdown, no explanations.
+RULES:
+- Industry: exactly ONE, based on most recent 1-2 roles.
+- Domain: exactly ONE functional expertise (e.g. HRBP, L&D, PMO).
+- HardSkills: max 10. SoftSkills: max 5. Tools: relevant only. Deduplicate.
+- Certifications: keep originals if present. If NONE exist, generate 3 realistic ones ONLY in LLM_Generated_Certificates.
+- Auto-fill LLM_Generated_Technical_Skills, LLM_Generated_Soft_Skills, LLM_Generated_Certificates ONLY when originals are empty.
+- Summary: 2-3 lines covering role, key skills, education, domain+industry.
+- ProfileSnapshot: one line summarizing role+experience+core capability.
+- ExperienceLevel: one of Fresher|Junior|Mid-Level|Senior|Lead|Manager|Senior Manager|Director|Senior Director|Vice President|Senior Vice President|C-Level Executive|Head / Department Head|Founder / Co-Founder|Not specified.
+- "Know about yourself" > "Career stage category": one of Student|Early Professional|Mid Career Pivot|Job Seeker.
+- YearsOfExperience: calculate from dates if possible.
+- Missing fields: "Not specified". No hallucination. No markdown.
 
-------------------------------------------------------------
-CRITICAL OVERRIDES (STRICT)
-------------------------------------------------------------
-1. INDUSTRY RULE (STRICT)
-   - You MUST return exactly ONE ** Industry**, even if the resume mentions multiple.
-   - Choose the MOST RECENT logical industry based on last 1–2 job roles.
-   - Examples:
-        If last job is at Lowe's → Industry = "Retail"
-        If last job is Diageo → Industry = "Beverage / FMCG"
-        If last job is in IT consulting → Industry = "Information Technology Services"
-        - Retail
-        - FMCG
-        - Consulting
-        - Insurance
-        - IT Services
-        - Telecommunications
-
-2. DOMAIN (MUST BE EXACTLY ONE)
-• Domain = primary functional expertise (HRBP, L&D, DEI, PMO, etc.).
-• Select ONE domain based on:
-    – 70%+ responsibilities across roles
-    – Skills and certifications
-• Examples: "Leadership & Organizational Development", "HR Business Partnering", "DEI & Culture Transformation", "Program Management Office (PMO)".
-
-3. SKILL LIMITS (VERY STRICT)
-• HardSkills → MAX 10
-• SoftSkills → MAX 5
-• Tools → unlimited but relevant only
-• Remove duplicates (standardize names)
-• Choose skills most relevant to the latest 1–2 roles.
-
-4. CERTIFICATION RULES
-• If certifications exist → keep EXACTLY as they appear.
-• If NO certifications → generate EXACTLY 3 realistic ones ONLY inside:
-      "LLM_Generated_Certificates"
-• NEVER fill original Certification fields when empty.
-
-5. AUTO-FILL RULE (STRICT)
-Auto-fill ONLY if original field is EMPTY:
-• Technical Skills → fill ONLY "LLM_Generated_Technical_Skills"
-• Soft Skills     → fill ONLY "LLM_Generated_Soft_Skills"
-• Certifications  → fill ONLY "LLM_Generated_Certificates"
-
-6. EMPTY DEFINITION
-EMPTY = "", null, whitespace, empty list, or list of empty objects.
-
-------------------------------------------------------------
-INSTRUCTION RULES (APPLY TO ALL FIELDS)
-------------------------------------------------------------
-
-SUMMARY (2–3 lines)
-Must include:
-• Role/domain identity
-• Key technical or soft skills
-• Highest relevant education
-• ONE Domain + ONE Industry
-
-SKILLS CLASSIFICATION
-• Tools = platforms, software, cloud tools
-• HardSkills = technical or domain skills
-• SoftSkills = behavioural and communication skills
-
-EXPERIENCE
-YearsOfExperience may be calculated if dates are clearly provided.
-
-PROFILE SNAPSHOT
-One strong line summarizing role + experience + core capability.
-
-EXPERIENCE LEVEL
-Allowed values:
-"Fresher", "Junior", "Mid-Level", "Senior", "Lead", "Manager",
-"Senior Manager", "Director", "Senior Director", "Vice President",
-"Senior Vice President", "C-Level Executive",
-"Head / Department Head", "Founder / Co-Founder", "Not specified".
-
-PERSONA INSIGHTS
-Infer ONLY behavioural patterns and strengths (no hallucination).
-
-CAREER STAGE CATEGORY
-One of: "Student", "Early Professional", "Mid Career Pivot", "Job Seeker".
-------------------------------------------------------------
-JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
-------------------------------------------------------------
-
+JSON SCHEMA:
 {
-  "Name": "",
-  "DOB": "",
-  "Email": "",
-  "Phone": "",
-  "Address": "",
-  "LinkedIn": "",
+  "Name": "", "DOB": "", "Email": "", "Phone": "", "Address": "", "LinkedIn": "",
   "Summary": "",
-  "Skills": {
-    "HardSkills": [],
-    "SoftSkills": [],
-    "Tools": []
-  },
-  "WorkExperience": [
-    {
-      "Company": "",
-      "Role": "",
-      "Duration": "",
-      "Description": ""
-    }
-  ],
-  "Education": [
-    {
-      "Degree": "",
-      "Institution": "",
-      "Grade": "",
-      "Year": ""
-    }
-  ],
-  "Certifications": [
-    {
-      "Name": "",
-      "Issuer": "",
-      "Year": ""
-    }
-  ],
-   "Interships": [
-    {
-      "Title": "",
-      "Description": ""
-    }
-  ],
-  "Projects": [
-    {
-      "Title": "",
-      "Description": ""
-    }
-  ],
-  "Languages": [
-    {
-      "Language": "",
-      "Proficiency": ""
-    }
-  ],
-  "Awards": [
-    {
-      "Title": "",
-      "Issuer": "",
-      "Year": ""
-    }
-  ],
-  "VolunteerExperience": [
-    {
-      "Organization": "",
-      "Role": "",
-      "Duration": "",
-      "Description": ""
-    }
-  ],
+  "Skills": {"HardSkills": [], "SoftSkills": [], "Tools": []},
+  "WorkExperience": [{"Company": "", "Role": "", "Duration": "", "Description": ""}],
+  "Education": [{"Degree": "", "Institution": "", "Grade": "", "Year": ""}],
+  "Certifications": [{"Name": "", "Issuer": "", "Year": ""}],
+  "Interships": [{"Title": "", "Description": ""}],
+  "Projects": [{"Title": "", "Description": ""}],
+  "Languages": [{"Language": "", "Proficiency": ""}],
+  "Awards": [{"Title": "", "Issuer": "", "Year": ""}],
+  "VolunteerExperience": [{"Organization": "", "Role": "", "Duration": "", "Description": ""}],
   "Hobbies": [],
-  "OtherSections": [
-    {
-      "Title": "",
-      "Description": ""
-    }
-  ],
+  "OtherSections": [{"Title": "", "Description": ""}],
   "YearsOfExperience": 0.0,
-
   "Talent Information": {
-    "Core Tasks": "",
-    "Supplementary Tasks": "",
-    "Emerging Tasks": "",
-    "Knowledge": "",
-    "Skills": "",
-    "Abilities": "",
-    "Work activities": "",
-    "Work styles": "",
-    "Work values": "",
-    "Technical Skills": "",
-    "Hot Technologies": "",
-    "Soft Skills": "",
+    "Core Tasks": "", "Supplementary Tasks": "", "Emerging Tasks": "",
+    "Knowledge": "", "Skills": "", "Abilities": "",
+    "Work activities": "", "Work styles": "", "Work values": "",
+    "Technical Skills": "", "Hot Technologies": "", "Soft Skills": "",
     "Functional Skills": "",
-    "Certifications": [
-      {
-        "Name": "",
-        "Provider": "",
-        "Year": ""
-      }
-    ],
-    "Salary grades": "",
-    "Career Objective": "",
-    "Career Interest Areas": ""
+    "Certifications": [{"Name": "", "Provider": "", "Year": ""}],
+    "Salary grades": "", "Career Objective": "", "Career Interest Areas": ""
   },
-
   "Anchor Attributes": {
-    "Achievements": "",
-    "Behavioral Skills": "",
-    "Interests": "",
-    "Competency": "",
-    "Cognitive Preferences": "",
-    "Creative Inclinations": "",
-    "Exploration Interest": "",
-    "Future study intent": "",
-    "Cultural Exposure": "",
-    "Emerging Tech Awareness": "",
-    "Hobbies": "",
-    "Learning Agility": "",
-    "Life Skills": "",
-    "Motivation Drivers": "",
-    "Motivating Activities": "",
-    "Newly Acquired Skills": "",
-    "Organizational Skills": "",
-    "Personal Interests": "",
-    "Social Causes": "",
-    "Volunteering": "",
+    "Achievements": "", "Behavioral Skills": "", "Interests": "",
+    "Competency": "", "Cognitive Preferences": "", "Creative Inclinations": "",
+    "Exploration Interest": "", "Future study intent": "", "Cultural Exposure": "",
+    "Emerging Tech Awareness": "", "Hobbies": "", "Learning Agility": "",
+    "Life Skills": "", "Motivation Drivers": "", "Motivating Activities": "",
+    "Newly Acquired Skills": "", "Organizational Skills": "",
+    "Personal Interests": "", "Social Causes": "", "Volunteering": "",
     "Personality Traits": ""
   },
-
-  "Know about yourself": {
-    "Inferred Persona Insights": "",
-    "Career stage category": ""
-  },
-
-  "Domain": "",
-  "Industry":"",
-  "ProfileSnapshot": "",
-  "ExperienceLevel": "",
-  "AllCompanies": [],
-  "AllRoles": [],
-
+  "Know about yourself": {"Inferred Persona Insights": "", "Career stage category": ""},
+  "Domain": "", "Industry": "", "ProfileSnapshot": "", "ExperienceLevel": "",
+  "AllCompanies": [], "AllRoles": [],
   "LLM_Generated_Certificates": [],
   "LLM_Generated_Technical_Skills": [],
   "LLM_Generated_Soft_Skills": []
 }
-
-------------------------------------------------------------
-FINAL RULES
-------------------------------------------------------------
-– Output MUST be valid JSON only.
-– No explanation, no markdown, no surrounding text.
-– NO hallucination of factual information.
-– Respect ALL skill limits (HardSkills=10, SoftSkills=5).
-– Auto-fill ONLY the LLM_Generated_* fields when originals are empty.
-– If certifications exist in resume → LLM_Generated_Certificates MUST remain empty.
-– Keep Domain and Industry as exactly ONE each.
-– Do NOT modify existing schema or reorder keys.
 """
 
 # ---------------------------------------------------------------------------
@@ -406,78 +215,15 @@ ANCHOR_OPTIONS_WITHOUT_CV_PROMPT = (
 # ---------------------------------------------------------------------------
 
 SUMMARY_EXTRACTION_PROMPT = """\
-You are a precise JSON extractor. Your task is to extract the **most relevant and concise keywords or phrases** from a structured resume JSON.
+Extract one buzzword-style keyword (max 3 words) per field from the resume JSON. Return ONLY valid JSON.
 
-Requirements:
-1. For each field, provide a **single short keyword or catchy phrase** (max 3 words).
-2. Prefer **impactful, buzzword-style keywords** that can stand alone.
-3. **DO NOT enforce uniqueness** across fields. Provide the best keyword for each field, even if it is similar to another.
-4. If a field is missing or contains "Not specified", output "Not specified" (except for Hobbies, which outputs []).
-5. The output must strictly follow the provided JSON structure.
+RULES:
+- Missing or "Not specified" fields → "Not specified" (Hobbies → []).
+- Duplicates across fields are OK. No markdown.
 
-[... Rest of the prompt structure and groupings remain the same ...]
+JSON SCHEMA:
+{{"Talent attributes": {{"Core Code": {{"Core Tasks":"","Supplementary Tasks":"","Hot Technologies":"","Functional Skills":"","Skills":""}}, "DNA of work": {{"Work Activities":"","Work Values":"","Work Styles":"","Abilities":""}}, "Interest Compass": {{"Career Interest Areas":"","Knowledge":"","Emerging Tasks":""}}, "Upskills Unlocked": {{"Newly Acquired Skills":"","Emerging Tech Awareness":""}}}}, "Anchor attributes": {{"Passion Palette": {{"Hobbies":[],"Personal Interests":"","Motivating Activities":"","Social Cause":"","Cultural Exposure":"","Volunteering":""}}, "Drives You": {{"Motivation Drivers":"","Competency":"","Learning Agility":"","Cognitive Preferences":"","Creative Inclinations":""}}, "Rooted In You": {{"Achievements":"","Life Skills":"","Behavioural Skills":"","Organizational Skills":"","Personality Traits":""}}, "Moves you forward": {{"Exploration Interest":"","Future Study Intent":""}}}}}}
 
-**Output format:** Provide a **single JSON object** with exactly this structure:
-
-{{
-  "Talent attributes": {{
-    "Core Code": {{
-      "Core Tasks": "",
-      "Supplementary Tasks": "",
-      "Hot Technologies": "",
-      "Functional Skills": "",
-      "Skills": ""
-    }},
-    "DNA of work": {{
-      "Work Activities": "",
-      "Work Values": "",
-      "Work Styles": "",
-      "Abilities": ""
-    }},
-    "Interest Compass": {{
-      "Career Interest Areas": "",
-      "Knowledge": "",
-      "Emerging Tasks": ""
-    }},
-    "Upskills Unlocked": {{
-      "Newly Acquired Skills": "",
-      "Emerging Tech Awareness": ""
-    }}
-  }},
-  "Anchor attributes": {{
-    "Passion Palette": {{
-      "Hobbies": [],
-      "Personal Interests": "",
-      "Motivating Activities": "",
-      "Social Cause": "",
-      "Cultural Exposure": "",
-      "Volunteering": ""
-    }},
-    "Drives You": {{
-      "Motivation Drivers": "",
-      "Competency": "",
-      "Learning Agility": "",
-      "Cognitive Preferences": "",
-      "Creative Inclinations": ""
-    }},
-    "Rooted In You": {{
-      "Achievements": "",
-      "Life Skills": "",
-      "Behavioural Skills": "",
-      "Organizational Skills": "",
-      "Personality Traits": ""
-    }},
-    "Moves you forward": {{
-      "Exploration Interest": "",
-      "Future Study Intent": ""
-    }}
-  }}
-}}
-
-**Instructions:**
-Review each field in the input JSON.
-Extract the **most relevant item** per field.
-Convert it into a **short, buzzword-style phrase**.
 Input JSON:
 {resume_json}\
 """
