@@ -28,7 +28,7 @@ async def _gemini_with_retry(prompt, max_retries: int = 4):
     delay = 2.0
     for attempt in range(max_retries):
         try:
-            return await _gemini_with_retry(prompt)
+            return await model.generate_content_async(prompt)
         except Exception as exc:
             err = str(exc)
             is_rate_limit = "429" in err or "ResourceExhausted" in err or "quota" in err.lower()
