@@ -32,8 +32,12 @@ from app.utils import verify_password, hash_password
 from app.schemas.user import EditProfileRequest
 
 import os
+import logging
+import time
 import google.generativeai as genai
 from dotenv import load_dotenv
+
+logger = logging.getLogger("gemini")
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -49,19 +53,25 @@ async def _gemini_sync_with_retry(contents, generation_config, max_retries: int 
     import asyncio as _asyncio
     delay = 2.0
     for attempt in range(max_retries):
+        t0 = time.time()
         try:
-            return await _asyncio.to_thread(
+            logger.info(f"[GEMINI CALL] caller=summary/model | attempt={attempt+1}")
+            response = await _asyncio.to_thread(
                 gemini_model.generate_content,
                 contents=contents,
                 generation_config=generation_config,
             )
+            logger.info(f"[GEMINI CALL] caller=summary/model | SUCCESS | attempt={attempt+1} | time={round(time.time()-t0,2)}s")
+            return response
         except Exception as exc:
             err = str(exc)
             is_rate_limit = "429" in err or "ResourceExhausted" in err or "quota" in err.lower()
             if is_rate_limit and attempt < max_retries - 1:
+                logger.warning(f"[GEMINI CALL] caller=summary/model | RATE LIMIT | attempt={attempt+1} | retrying in {delay}s")
                 await _asyncio.sleep(delay)
                 delay *= 2
                 continue
+            logger.error(f"[GEMINI CALL] caller=summary/model | FAILED | attempt={attempt+1} | time={round(time.time()-t0,2)}s | error={err[:200]}")
             raise
 
 

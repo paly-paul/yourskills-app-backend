@@ -2,6 +2,8 @@ import asyncio
 import os
 import json
 import pathlib
+import logging
+import time
 from datetime import datetime
 from dateutil import parser as date_parser
 from dotenv import load_dotenv
@@ -16,26 +18,39 @@ import uuid
 from fastapi import HTTPException
 from bson import ObjectId
 
+logger = logging.getLogger("gemini")
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
+_gemini_call_counter = 0
 
 
-async def _gemini_with_retry(prompt, max_retries: int = 4):
-    """Call Gemini with exponential backoff on rate-limit (429) errors."""
+async def _gemini_with_retry(prompt, max_retries: int = 4, caller: str = "unknown"):
+    global _gemini_call_counter
+    _gemini_call_counter += 1
+    call_id = _gemini_call_counter
+    prompt_preview = str(prompt)[:120].replace("\n", " ")
+    logger.info(f"[GEMINI CALL #{call_id}] caller={caller} | prompt_preview={prompt_preview!r}")
     delay = 2.0
     for attempt in range(max_retries):
+        t0 = time.time()
         try:
-            return await model.generate_content_async(prompt)
+            response = await model.generate_content_async(prompt)
+            elapsed = round(time.time() - t0, 2)
+            logger.info(f"[GEMINI CALL #{call_id}] SUCCESS | attempt={attempt+1} | time={elapsed}s | caller={caller}")
+            return response
         except Exception as exc:
+            elapsed = round(time.time() - t0, 2)
             err = str(exc)
             is_rate_limit = "429" in err or "ResourceExhausted" in err or "quota" in err.lower()
             if is_rate_limit and attempt < max_retries - 1:
+                logger.warning(f"[GEMINI CALL #{call_id}] RATE LIMIT | attempt={attempt+1} | retrying in {delay}s | caller={caller}")
                 await asyncio.sleep(delay)
                 delay *= 2
                 continue
+            logger.error(f"[GEMINI CALL #{call_id}] FAILED | attempt={attempt+1} | time={elapsed}s | error={err[:200]} | caller={caller}")
             raise
 
 def parse_duration(duration_str):
@@ -762,7 +777,10 @@ FINAL RULES
                 prompt
             ]
 
+        logger.info("[GEMINI CALL] caller=extract_cv_data_from_file | sending CV file to Gemini for parsing")
+        t0 = time.time()
         response = model.generate_content(content_input, stream=False)
+        logger.info(f"[GEMINI CALL] caller=extract_cv_data_from_file | SUCCESS | time={round(time.time()-t0,2)}s")
         response_text = response.text.strip()
 
         if response_text.startswith("```json"):
@@ -920,7 +938,7 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         "5. **Format Reference for Skills:** For 'SoftSkills' and 'HardSkills', provide single-word or short-phrase skills. Example: 'Python', 'Leadership', 'Data Analysis'."
     )
 
-    response = await _gemini_with_retry(prompt)
+    response = await _gemini_with_retry(prompt, caller="generate_missing_field_suggestions")
     cleaned = clean_llm_json_response(response.text)
 
     try:
@@ -1057,7 +1075,7 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         )
 
         try:
-            response = await _gemini_with_retry(prompt)
+            response = await _gemini_with_retry(prompt, caller="generate_job_attribute_options")
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
@@ -1091,7 +1109,9 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
             result_item["limit"] = limit
         return result_item
 
+    logger.info(f"[GEMINI GATHER] generate_job_attribute_options | firing {len(questions_from_db)} calls in parallel")
     results = await asyncio.gather(*[_fetch_options_for_question(q) for q in questions_from_db])
+    logger.info(f"[GEMINI GATHER] generate_job_attribute_options | all {len(questions_from_db)} calls complete")
 
     return {
         "success": True,
@@ -1410,7 +1430,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         )
 
         try:
-            response = await _gemini_with_retry(prompt)
+            response = await _gemini_with_retry(prompt, caller="generate_anchor_attribute_options")
             cleaned = clean_llm_json_response(response.text)
             parsed_json = json.loads(cleaned)
             options = parsed_json.get("options", [])
@@ -1438,7 +1458,9 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
                 "error": str(e),
             }
 
+    logger.info(f"[GEMINI GATHER] generate_anchor_attribute_options | firing {len(questions)} calls in parallel")
     raw = await asyncio.gather(*[_fetch_anchor_option(q) for q in questions])
+    logger.info(f"[GEMINI GATHER] generate_anchor_attribute_options | all {len(questions)} calls complete")
     suggestions = [r for r in raw if r is not None]
 
     # ----------------------------------------------------------
@@ -1539,7 +1561,7 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
         )
 
         try:
-            response = await _gemini_with_retry(prompt)
+            response = await _gemini_with_retry(prompt, caller="generate_job_attribute_options_without_cv")
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
@@ -1567,7 +1589,9 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
             result_item["limit"] = limit
         return result_item
 
+    logger.info(f"[GEMINI GATHER] generate_job_attribute_options_without_cv | firing {len(all_questions)} calls in parallel")
     results = list(await asyncio.gather(*[_fetch_without_cv_option(q) for q in all_questions]))
+    logger.info(f"[GEMINI GATHER] generate_job_attribute_options_without_cv | all {len(all_questions)} calls complete")
 
     # Save results
     await proceed_collection.update_one(
@@ -1697,7 +1721,7 @@ async def generate_anchor_options_from_answers_without_cv(
         )
 
         try:
-            response = await _gemini_with_retry(prompt)
+            response = await _gemini_with_retry(prompt, caller="generate_anchor_options_from_answers_without_cv")
             cleaned = clean_llm_json_response(response.text)
             parsed = json.loads(cleaned)
             options = parsed.get("options", [])
@@ -1722,7 +1746,9 @@ async def generate_anchor_options_from_answers_without_cv(
                 "error": str(e),
             }
 
+    logger.info(f"[GEMINI GATHER] generate_anchor_options_from_answers_without_cv | firing {len(questions)} calls in parallel")
     raw = await asyncio.gather(*[_fetch_anchor_without_cv(q) for q in questions])
+    logger.info(f"[GEMINI GATHER] generate_anchor_options_from_answers_without_cv | all {len(questions)} calls complete")
     suggestions = [r for r in raw if r is not None]
     await db["proceed_without_cv"].update_one(
         {"_id": document_id},
