@@ -1392,7 +1392,7 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
             "Also generate options based on the content of the question, ensuring they introduce new elements "
             "that are not already included in the resume/CV but relatable to the job title.\n\n"
             f"STRICT KNOWLEDGE BASE (use ONLY this content, no invention):\n{combined_context}\n\n"
-            f"Target parameters: {‘, ‘.join(parameter_list)}\n"
+            f"Target parameters: {', '.join(parameter_list)}\n"
             f"Question: {question_text}\n\n"
             "Instructions:\n"
             f"- Generate EXACTLY {option_count} options.\n"
