@@ -17,6 +17,16 @@ import random
 import uuid
 from fastapi import HTTPException
 from bson import ObjectId
+from app.utils.prompts import (
+    CV_EXTRACTION_PROMPT,
+    MISSING_FIELD_SUGGESTIONS_PROMPT,
+    JOB_ATTRIBUTE_OPTIONS_PROMPT,
+    JOB_ATTRIBUTE_OPTIONS_WITHOUT_CV_PROMPT,
+    ANCHOR_OPTIONS_WITH_CV_PROMPT,
+    ANCHOR_OPTIONS_WITHOUT_CV_PROMPT,
+    VARIATION_INSTRUCTIONS,
+    STYLE_NOISE_POOL,
+)
 
 logger = logging.getLogger("gemini")
 
@@ -172,599 +182,9 @@ def extract_job_role(parsed_json):
     return None
 
 
-# def extract_cv_data_from_file(filepath: str, mime_type: str):
-    
-#     prompt = """
-# You are a Senior HR Recruitment, Talent Analyst, and Skill Intelligence Expert trained to extract accurate structured information from resumes, profiles, or people data.
-
-# Your task:
-# Read the documents/data and return a CLEAN, VALID JSON object following the exact schema below.
-# Use your skill analytics and HR experience to extract and interpret information correctly.
-# Do NOT delete, modify, rename, or reorder existing keys.
-# You may ONLY add the additional keys provided at the bottom.
-# If information is missing, return "Not specified".
-# Return ONLY valid JSON. No commentary, no markdown, no explanations.
-
-
-# ------------------------------------------------------------
-# CRITICAL OVERRIDES (STRONG RULES YOU MUST FOLLOW)
-# ------------------------------------------------------------
-
-# 1. INDUSTRY RULE (STRICT)
-#    - You MUST return exactly ONE ** Industry**, even if the resume mentions multiple.
-#    - Choose the MOST RECENT logical industry based on last 1–2 job roles.
-#    - Examples:
-#         If last job is at Lowe’s → Industry = "Retail"
-#         If last job is Diageo → Industry = "Beverage / FMCG"
-#         If last job is in IT consulting → Industry = "Information Technology Services"
-#         - Retail  
-#         - FMCG  
-#         - Consulting  
-#         - Insurance  
-#         - IT Services  
-#         - Telecommunications  
-
-# 2. DOMAIN RULE (STRICT)
-#    - You MUST return exactly ONE ** Domain**.
-#    - Domain = functional expertise (HRBP, L&D, DEI, Program Management, etc.)
-#    - Choose the MOST dominant domain based on:
-#         - 70% of responsibilities across roles
-#         - Skills & certifications
-#    - Example: "Leadership & Organizational Development",“Human Resources – L&D & Organizational Development”, “HR Business Partnering”, “DEI & Culture Transformation” ,“Program Management Office (PMO)”  
-#    - DO NOT produce multiple domains.
-
-# 3. TECHNICAL SKILL LIMIT (VERY STRICT)
-#    - Output ONLY the **top 10 relevant technical/hard skills**.
-#    - If more than 10 appear → select the 10 MOST RELEVANT for the job role.
-
-# 4. SKILL LIMITS (STRICT)
-#    • HardSkills → MAX 10  
-#    • SoftSkills → MAX 5  
-#    • Tools → unlimited but keep only relevant tools  
-#    • Remove duplicates (e.g., “Machine Learning” vs “ML” → keep standard term)
-#    • Choose most relevant skills (based on last roles + responsibilities)
-   
-# 5. CERTIFICATION RULES (ALREADY EXISTING)
-#    - If certifications exist → keep them unchanged.
-#    - If missing → generate exactly 3 realistic certifications in LLM_Generated_Certificates only.
-#    - NEVER auto-fill original Certification fields when empty.
-
-# 6. AUTO-FILL RULE (STRICT)
-#    Auto-fill ONLY if the corresponding field is EMPTY:
-#       • Technical Skills → fill ONLY "LLM_Generated_Technical_Skills"
-#       • Soft Skills → fill ONLY "LLM_Generated_Soft_Skills"
-#       • Certifications → fill ONLY "LLM_Generated_Certificates"
-      
-# 7. EMPTY means: "", null, whitespace, empty array, or arrays containing only empty values.
-
-
-# ------------------------------------------------------------
-# INSTRUCTION RULES (APPLY TO ALL FIELDS)
-# ------------------------------------------------------------
-# SUMMARY:
-# The "Summary" must be a powerful 2–3 line high-level snapshot capturing:
-# – Role/domain identity  
-# – Key skills (technical or soft)  
-# – Highest education or academic background  
-# – Only One appropriate **Industry–Domain pairing**, chosen **ONLY one domain and industry** from resume evidence and based on the examples below:
-
-#     • Industry - Financial Services  
-#       Domain - Retail Banking, Mortgage Processing, Fraud Detection  
-
-#     • Industry - Healthcare  
-#       Domain - Patient Scheduling, Clinical Documentation, Medical Billing & Claims  
-
-#     • Industry - E-commerce / Retail  
-#       Domain - Inventory Management, Logistics & Fulfillment  
-
-#     • Industry - Telecommunications  
-#       Domain - Billing and Invoicing, Network Provisioning, Customer Relationship Management  
-
-
-# SKILLS:
-# Tools → programming languages, frameworks, cloud tools, software, platforms  
-# HardSkills → technical, domain, analytical, operational skills  
-# SoftSkills → behavioural, communication, leadership, interpersonal skills  
-
-# EXPERIENCE:
-# YearsOfExperience is used ONLY if explicitly mentioned.
-# You MAY calculate or infer from dates and timelines if clearly provided.
-
-# PROFILE SNAPSHOT:
-# A short 1-line mini-summary of role + experience + key skill.
-
-# EXPERIENCE LEVEL:
-# Choose ONLY from actual job roles, job titles, leadership positions, or responsibilities.
-# Allowed values:
-# “Fresher”,  
-# “Junior”,  
-# “Mid-Level”,  
-# “Senior”,  
-# “Lead”,  
-# “Manager”,  
-# “Senior Manager”,  
-# “Director”,  
-# “Senior Director”,  
-# “Vice President”,  
-# “Senior Vice President”,  
-# “C-Level Executive”,  
-# “Founder / Co-Founder”,  
-# “Head / Department Head”,  
-# “Not specified”
-
-# PERSONA INSIGHTS:
-# Interpret strengths, behaviour traits, and working style ONLY from resume evidence.
-
-# CAREER STAGE CATEGORY:
-# One of:
-# “Student”, “Early Professional”, “Mid Career Pivot”, “Job Seeker”.
-# ------------------------------------------------------------
-# JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
-# ------------------------------------------------------------
-
-# {
-#   "Name": "",
-#   "DOB": "",
-#   "Email": "",
-#   "Phone": "",
-#   "Address": "",
-#   "LinkedIn": "",
-#   "Summary": "",
-#   "Skills": {
-#     "HardSkills": [],
-#     "SoftSkills": [],
-#     "Tools": []
-#   },
-#   "WorkExperience": [
-#     {
-#       "Company": "",
-#       "Role": "",
-#       "Duration": "",
-#       "Description": ""
-#     }
-#   ],
-#   "Education": [
-#     {
-#       "Degree": "",
-#       "Institution": "",
-#       "Grade": "",
-#       "Year": ""
-#     }
-#   ],
-#   "Certifications": [
-#     {
-#       "Name": "",
-#       "Issuer": "",
-#       "Year": ""
-#     }
-#   ],
-#    "Interships": [
-#     {
-#       "Title": "",
-#       "Description": ""
-#     }
-#   ],
-#   "Projects": [
-#     {
-#       "Title": "",
-#       "Description": ""
-#     }
-#   ],
-#   "Languages": [
-#     {
-#       "Language": "",
-#       "Proficiency": ""
-#     }
-#   ],
-#   "Awards": [
-#     {
-#       "Title": "",
-#       "Issuer": "",
-#       "Year": ""
-#     }
-#   ],
-#   "VolunteerExperience": [
-#     {
-#       "Organization": "",
-#       "Role": "",
-#       "Duration": "",
-#       "Description": ""
-#     }
-#   ],
-#   "Hobbies": [],
-#   "OtherSections": [
-#     {
-#       "Title": "",
-#       "Description": ""
-#     }
-#   ],
-#   "YearsOfExperience": 0.0,
-
-#   "Talent Information": {
-#     "Core Tasks": "",
-#     "Supplementary Tasks": "",
-#     "Emerging Tasks": "",
-#     "Knowledge": "",
-#     "Skills": "",
-#     "Abilities": "",
-#     "Work activities": "",
-#     "Work styles": "",
-#     "Work values": "",
-#     "Technical Skills": "",
-#     "Hot Technologies": "",
-#     "Soft Skills": "",
-#     "Functional Skills": "",
-#     "Certifications": [
-#       {
-#         "Name": "",
-#         "Provider": "",
-#         "Year": ""
-#       }
-#     ],
-#     "Salary grades": "",
-#     "Career Objective": "",
-#         "Career Interest Areas": "",
-#   },
-
-#   "Anchor Attributes": {
-#     "Achievements": "",
-#     "Behavioral Skills": "",
-#     "Interests": "",
-#     "Competency": "",
-#     "Cognitive Preferences": "",
-#     "Creative Inclinations": "",
-#     "Exploration Interest": "",
-#     "Future study intent": "",
-#     "Cultural Exposure": "",
-#     "Emerging Tech Awareness": "",
-#     "Hobbies": "",
-#     "Learning Agility": "",
-#     "Life Skills": "",
-#     "Motivation Drivers": "",
-#     "Motivating Activities": "",
-#     "Newly Acquired Skills": "",
-#     "Organizational Skills": "",
-#     "Personal Interests": "",
-#     "Social Causes": "",
-#     "Volunteering": "",
-#     "Personality Traits": ""
-#   },
-
-#   "Know about yourself": {
-#     "Inferred Persona Insights": "",
-#     "Career stage category": ""
-#   },
-
-#   "Domain": "",
-#   "Industry":"",
-#   "ProfileSnapshot": "",
-#   "ExperienceLevel": "",
-
-#   "LLM_Generated_Certificates": [],
-#   "LLM_Generated_Technical_Skills": [],
-#   "LLM_Generated_Soft_Skills": []
-# }
-
-# ------------------------------------------------------------
-# FINAL RULES
-# ------------------------------------------------------------
-# – Output MUST be valid JSON.  
-# – Start with “{” and end with “}”.  
-# – No explanation, no markdown, no extra text.  
-# – Never hallucinate factual data.  
-# – Only auto-fill Technical Skills, Soft Skills, and Certifications inside Talent Information if missing.
-# – Respect top-skill limits  
-# – If empty, DO NOT fill the original fields.
-# – Instead fill ONLY:
-#     "LLM_Generated_Technical_Skills",
-#     "LLM_Generated_Soft_Skills",
-#     "LLM_Generated_Certificates".
-# – If any certifications exist in the resume → LLM_Generated_Certificates MUST be empty.
-# – If no certifications exist → LLM_Generated_Certificates MUST be generated.
-# – Infer ONLY in Persona Insights, not in structured fields.
-# – Keep domain & industry specific and evidence-based
-
-# """
-
-#     try:
-#         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-#             file_text = extract_docx_text(filepath)
-#             content_input = [file_text, prompt]
-#         else:
-#             file_bytes = pathlib.Path(filepath).read_bytes()
-#             content_input = [
-#                 {"mime_type": mime_type, "data": file_bytes},
-#                 prompt
-#             ]
-
-#         response = model.generate_content(content_input, stream=False)
-#         response_text = response.text.strip()
-
-#         if response_text.startswith("```json"):
-#             response_text = response_text[7:]
-#         if response_text.endswith("```"):
-#             response_text = response_text[:-3]
-
-#         response_text = response_text.strip()
-#         start_idx = response_text.find('{')
-#         end_idx = response_text.rfind('}')
-#         response_text = response_text[start_idx:end_idx+1]
-
-#         parsed_json = json.loads(response_text)
-#         parsed_json = clean_json(parsed_json)
-
-#         work_exp = parsed_json.get("WorkExperience", [])
-#         years_from_work = calculate_years_of_experience(work_exp)
-
-#         if years_from_work > 0:
-#             parsed_json["YearsOfExperience"] = years_from_work
-#         else:
-#             parsed_json["YearsOfExperience"] = extract_years_from_summary(parsed_json.get("Summary", ""))
-
-#         parsed_json["JobRole"] = extract_job_role(parsed_json)
-
-#         return parsed_json
-
-#     except Exception as e:
-#         print("CV Extraction Error:", str(e))
-#         return {"error": "Failed to parse CV data"}
-
-
 async def extract_cv_data_from_file(filepath: str, mime_type: str):
 
-    prompt = """
-You are a Senior HR Recruitment, Talent Analyst, and Skill Intelligence Expert trained to extract accurate structured information from resumes, profiles, or people data.
-
-Your task:
-Read the documents/data and return a CLEAN, VALID JSON object following the exact schema below.
-Use your HR experience to extract and interpret information correctly.
-Do NOT delete, modify, rename, or reorder existing keys.
-You may ONLY add the additional keys provided at the bottom.
-If information is missing, return "Not specified".
-Return ONLY valid JSON. No commentary, no markdown, no explanations.
-
-------------------------------------------------------------
-CRITICAL OVERRIDES (STRICT)
-------------------------------------------------------------
-1. INDUSTRY RULE (STRICT)
-   - You MUST return exactly ONE ** Industry**, even if the resume mentions multiple.
-   - Choose the MOST RECENT logical industry based on last 1–2 job roles.
-   - Examples:
-        If last job is at Lowe’s → Industry = "Retail"
-        If last job is Diageo → Industry = "Beverage / FMCG"
-        If last job is in IT consulting → Industry = "Information Technology Services"
-        - Retail  
-        - FMCG  
-        - Consulting  
-        - Insurance  
-        - IT Services  
-        - Telecommunications  
-        
-2. DOMAIN (MUST BE EXACTLY ONE)
-• Domain = primary functional expertise (HRBP, L&D, DEI, PMO, etc.).
-• Select ONE domain based on:
-    – 70%+ responsibilities across roles
-    – Skills and certifications
-• Examples: “Leadership & Organizational Development”, “HR Business Partnering”, “DEI & Culture Transformation”, “Program Management Office (PMO)”.
-
-3. SKILL LIMITS (VERY STRICT)
-• HardSkills → MAX 10  
-• SoftSkills → MAX 5  
-• Tools → unlimited but relevant only  
-• Remove duplicates (standardize names)  
-• Choose skills most relevant to the latest 1–2 roles.
-
-4. CERTIFICATION RULES
-• If certifications exist → keep EXACTLY as they appear.
-• If NO certifications → generate EXACTLY 3 realistic ones ONLY inside:
-      "LLM_Generated_Certificates"
-• NEVER fill original Certification fields when empty.
-
-5. AUTO-FILL RULE (STRICT)
-Auto-fill ONLY if original field is EMPTY:
-• Technical Skills → fill ONLY "LLM_Generated_Technical_Skills"
-• Soft Skills     → fill ONLY "LLM_Generated_Soft_Skills"
-• Certifications  → fill ONLY "LLM_Generated_Certificates"
-
-6. EMPTY DEFINITION
-EMPTY = "", null, whitespace, empty list, or list of empty objects.
-
-------------------------------------------------------------
-INSTRUCTION RULES (APPLY TO ALL FIELDS)
-------------------------------------------------------------
-
-SUMMARY (2–3 lines)
-Must include:
-• Role/domain identity  
-• Key technical or soft skills  
-• Highest relevant education  
-• ONE Domain + ONE Industry  
-
-SKILLS CLASSIFICATION
-• Tools = platforms, software, cloud tools  
-• HardSkills = technical or domain skills  
-• SoftSkills = behavioural and communication skills  
-
-EXPERIENCE
-YearsOfExperience may be calculated if dates are clearly provided.
-
-PROFILE SNAPSHOT
-One strong line summarizing role + experience + core capability.
-
-EXPERIENCE LEVEL
-Allowed values:
-“Fresher”, “Junior”, “Mid-Level”, “Senior”, “Lead”, “Manager”,  
-“Senior Manager”, “Director”, “Senior Director”, “Vice President”,  
-“Senior Vice President”, “C-Level Executive”,  
-“Head / Department Head”, “Founder / Co-Founder”, “Not specified”.
-
-PERSONA INSIGHTS
-Infer ONLY behavioural patterns and strengths (no hallucination).
-
-CAREER STAGE CATEGORY
-One of: “Student”, “Early Professional”, “Mid Career Pivot”, “Job Seeker”.
-------------------------------------------------------------
-JSON OUTPUT SCHEMA (DO NOT MODIFY EXISTING KEYS)
-------------------------------------------------------------
-
-{
-  "Name": "",
-  "DOB": "",
-  "Email": "",
-  "Phone": "",
-  "Address": "",
-  "LinkedIn": "",
-  "Summary": "",
-  "Skills": {
-    "HardSkills": [],
-    "SoftSkills": [],
-    "Tools": []
-  },
-  "WorkExperience": [
-    {
-      "Company": "",
-      "Role": "",
-      "Duration": "",
-      "Description": ""
-    }
-  ],
-  "Education": [
-    {
-      "Degree": "",
-      "Institution": "",
-      "Grade": "",
-      "Year": ""
-    }
-  ],
-  "Certifications": [
-    {
-      "Name": "",
-      "Issuer": "",
-      "Year": ""
-    }
-  ],
-   "Interships": [
-    {
-      "Title": "",
-      "Description": ""
-    }
-  ],
-  "Projects": [
-    {
-      "Title": "",
-      "Description": ""
-    }
-  ],
-  "Languages": [
-    {
-      "Language": "",
-      "Proficiency": ""
-    }
-  ],
-  "Awards": [
-    {
-      "Title": "",
-      "Issuer": "",
-      "Year": ""
-    }
-  ],
-  "VolunteerExperience": [
-    {
-      "Organization": "",
-      "Role": "",
-      "Duration": "",
-      "Description": ""
-    }
-  ],
-  "Hobbies": [],
-  "OtherSections": [
-    {
-      "Title": "",
-      "Description": ""
-    }
-  ],
-  "YearsOfExperience": 0.0,
-
-  "Talent Information": {
-    "Core Tasks": "",
-    "Supplementary Tasks": "",
-    "Emerging Tasks": "",
-    "Knowledge": "",
-    "Skills": "",
-    "Abilities": "",
-    "Work activities": "",
-    "Work styles": "",
-    "Work values": "",
-    "Technical Skills": "",
-    "Hot Technologies": "",
-    "Soft Skills": "",
-    "Functional Skills": "",
-    "Certifications": [
-      {
-        "Name": "",
-        "Provider": "",
-        "Year": ""
-      }
-    ],
-    "Salary grades": "",
-    "Career Objective": "",
-    "Career Interest Areas": ""
-  },
-
-  "Anchor Attributes": {
-    "Achievements": "",
-    "Behavioral Skills": "",
-    "Interests": "",
-    "Competency": "",
-    "Cognitive Preferences": "",
-    "Creative Inclinations": "",
-    "Exploration Interest": "",
-    "Future study intent": "",
-    "Cultural Exposure": "",
-    "Emerging Tech Awareness": "",
-    "Hobbies": "",
-    "Learning Agility": "",
-    "Life Skills": "",
-    "Motivation Drivers": "",
-    "Motivating Activities": "",
-    "Newly Acquired Skills": "",
-    "Organizational Skills": "",
-    "Personal Interests": "",
-    "Social Causes": "",
-    "Volunteering": "",
-    "Personality Traits": ""
-  },
-
-  "Know about yourself": {
-    "Inferred Persona Insights": "",
-    "Career stage category": ""
-  },
-
-  "Domain": "",
-  "Industry":"",
-  "ProfileSnapshot": "",
-  "ExperienceLevel": "",
-  "AllCompanies": [],
-  "AllRoles": [],
-
-  "LLM_Generated_Certificates": [],
-  "LLM_Generated_Technical_Skills": [],
-  "LLM_Generated_Soft_Skills": []
-}
-
-------------------------------------------------------------
-FINAL RULES
-------------------------------------------------------------
-– Output MUST be valid JSON only.  
-– No explanation, no markdown, no surrounding text.  
-– NO hallucination of factual information.  
-– Respect ALL skill limits (HardSkills=10, SoftSkills=5).  
-– Auto-fill ONLY the LLM_Generated_* fields when originals are empty.  
-– If certifications exist in resume → LLM_Generated_Certificates MUST remain empty.  
-– Keep Domain and Industry as exactly ONE each.  
-– Do NOT modify existing schema or reorder keys.  
-
-"""
+    prompt = CV_EXTRACTION_PROMPT
 
     try:
         if mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -925,17 +345,9 @@ async def generate_missing_field_suggestions(cv_context: dict) -> dict:
         return suggestions
 
     context_str = "\n".join(f"{k}: {v}" for k, v in cv_context.items() if v)
-    prompt = (
-        "You are an AI assistant specialized in analyzing CV/resume data to suggest missing or weak content. "
-        "Analyze the provided CV Context and identify relevant professional suggestions for ALL fields listed in 'Missing Fields'.\n\n"
-        f"CV Context:\n{context_str}\n\n"
-        f"Missing Fields: {missing_fields}\n\n"
-        "**CRITICAL RESPONSE FORMAT INSTRUCTIONS**\n"
-        "1. **Respond ONLY in valid JSON.**\n"
-        "2. **You MUST include a key for every field listed in 'Missing Fields'.** Use the exact key names (e.g., 'SoftSkills', 'Certifications').\n"
-        "3. **Each value MUST be a JSON array of strings.**\n"
-        "4. **Format Reference for Certifications:** For 'Certifications', format each suggestion as a single string: 'Certification Name – Issuing Organization'. Example: 'PMP – PMI', 'AWS Certified Developer – Amazon', or 'CSIR-UGC NET JRF - NTA'.\n"
-        "5. **Format Reference for Skills:** For 'SoftSkills' and 'HardSkills', provide single-word or short-phrase skills. Example: 'Python', 'Leadership', 'Data Analysis'."
+    prompt = MISSING_FIELD_SUGGESTIONS_PROMPT.format(
+        context_str=context_str,
+        missing_fields=missing_fields,
     )
 
     response = await _gemini_with_retry(prompt, caller="generate_missing_field_suggestions")
@@ -1051,27 +463,11 @@ async def generate_job_attribute_options(cv_context: dict, questions_from_db: li
         parameter_list = [p.strip() for p in parameter.split(" + ")]
         option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
 
-        prompt = (
-            "Generate focused, high-quality multiple-choice options based on the user's professional background and "
-            "the intent of the question.\n\n"
-            "Generate options based on the content of the question, ensuring they introduce new elements not already "
-            "included in the resume/CV but relatable to the job title.\n\n"
-            "CONTEXT SUMMARY:\n"
-            f"{context_str}\n\n"
-            "QUESTION:\n"
-            f"{question_text}\n\n"
-            "PARAMETERS:\n"
-            f"{', '.join(parameter_list)}\n\n"
-            "OUTPUT FORMAT (STRICT JSON):\n"
-            "{{\n"
-            "  \"options\": [\"Option 1\", \"Option 2\", ...]\n"
-            "}}\n\n"
-            "REQUIREMENTS:\n"
-            f"- Provide EXACTLY {option_count} options.\n"
-            "- Options must be short, clear (2–5 words), and directly related to the parameters and the question.\n"
-            "- Each option must start with a capital letter.\n"
-            "- No numbering, bullets, special symbols, or prefixes.\n"
-            "- Avoid generic, vague, or repetitive wording.\n"
+        prompt = JOB_ATTRIBUTE_OPTIONS_PROMPT.format(
+            context_str=context_str,
+            question_text=question_text,
+            parameters=", ".join(parameter_list),
+            option_count=option_count,
         )
 
         try:
@@ -1128,153 +524,6 @@ async def get_latest_user_cv(db, user_id: str):
     )
     return latest_cv
 
-
-# async def generate_anchor_attribute_options(user_id: str, questions, model, get_database):
-#     """
-#     Generate multiple-choice options for Anchor attributes based ONLY on:
-#     - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
-#     - Achievements (text field only)
-
-#     Each parameter contributes EXACTLY 2 options (fixed count).
-#     Saves results in the latest uploaded CV document for the user.
-#     """
-
-#     target_parameters = {
-#         "Creative Inclinations + Organizational Skills + Competency + Personality Traits",
-#         "Newly Acquired Skills + Emerging Tech Awareness + Future Study Intent"
-#     }
-
-#     db = await get_database()
-#     latest_cv = await get_latest_user_cv(db, user_id)
-#     if not latest_cv or "parsed_data" not in latest_cv:
-#         raise HTTPException(status_code=404, detail="No CV found for this user")
-
-#     cv_id = str(latest_cv["_id"])
-
-#     cursor = db["answers"].find({
-#         "cv_id": cv_id,
-#         "section": "Anchor Attributes",
-#         "parameter": {
-#             "$in": [
-#                 "Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities",
-#                 "Achievements"
-#             ]
-#         }
-#     })
-#     answers = await cursor.to_list(length=None)
-
-#     if not answers:
-#         raise HTTPException(status_code=404, detail="No required anchor answers found")
-
-#     base_free_text_map = {}
-#     for ans in answers:
-#         param = ans["parameter"]
-#         val = ans["value"]
-#         if isinstance(val, str):
-#             base_free_text_map[param] = val
-#         elif isinstance(val, dict) and "text" in val:
-#             base_free_text_map[param] = val["text"]
-
-#     non_empty_texts = [t for t in base_free_text_map.values() if t]
-#     random.shuffle(non_empty_texts)
-#     context_sample = "\n".join(non_empty_texts)
-
-#     style_noise_pool = [
-#         "use uncommon synonyms",
-#         "reorder ideas differently",
-#         "make phrasing more concise",
-#         "add creative wording twists",
-#         "slightly formal tone",
-#         "slightly casual tone",
-#         "shuffle activity order",
-#         "split compound ideas differently"
-#     ]
-#     random.shuffle(style_noise_pool)
-#     style_noise = ", ".join(style_noise_pool[:3])
-#     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
-
-#     suggestions = []
-
-#     for q in questions:
-#         parameter = q.get("parameter")
-#         if parameter not in target_parameters:
-#             continue
-
-#         question_text = q.get("question")
-#         type_ = q.get("type")
-#         iconfilename = q.get("iconfilename")
-
-#         parameter_list = [p.strip() for p in parameter.split("+")]
-#         option_count = 2 * len(parameter_list)  
-
-#         import pdb;pdb.set_trace()
-#         variation_instructions = (
-#             "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
-#             "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
-#             "- Introduce synonyms, shuffle word order, or shorten differently.\n"
-#             "- Do NOT invent anything that is not explicitly present in the free-text answers.\n"
-#             f"- Apply these random variation rules: {style_noise}\n"
-#         )
-
-#         prompt = (
-#             "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
-#             f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
-#             f"Target parameters: {', '.join(parameter_list)}\n"
-#             f"Question: {question_text}\n\n"
-#             "Instructions:\n"
-#             f"- Generate EXACTLY {option_count} short options.\n"
-#             "- Each option must rephrase, split, or summarize the ideas from the free-text.\n"
-#             "- DO NOT invent anything not in the context.\n"
-#             "- Keep options SHORT (2–5 words).\n"
-#             "- Start each option with a CAPITAL letter.\n"
-#             "- Return plain text options only (no labels or numbers).\n"
-#             "- All options must be distinct and meaningful.\n"
-#             f"{variation_instructions}"
-#             f"- Variation key: {variation_key}\n\n"
-#             "Respond ONLY in JSON format:\n"
-#             "{\n"
-#             "  \"options\": [\"<Short phrase 1>\", \"<Short phrase 2>\", ...]\n"
-#             "}"
-#         )
-
-#         try:
-#             response = await _gemini_with_retry(prompt)
-#             cleaned = clean_llm_json_response(response.text)
-#             parsed = json.loads(cleaned)
-#             options = parsed.get("options", [])
-
-#             formatted = []
-#             for opt in options[:option_count]:
-#                 cleaned_opt = opt.strip().lstrip("0123456789.- ").capitalize()
-#                 formatted.append(cleaned_opt)
-
-#             while len(formatted) < option_count:
-#                 formatted.append(f"Option {len(formatted)+1}")
-
-#             suggestions.append({
-#                 "parameter": parameter_list,
-#                 "question": question_text,
-#                 "type": type_,
-#                 "iconfilename": iconfilename,
-#                 "options": formatted
-#             })
-
-#         except Exception as e:
-#             suggestions.append({
-#                 "parameter": parameter_list,
-#                 "question": question_text,
-#                 "type": type_,
-#                 "iconfilename": iconfilename,
-#                 "options": [f"Option {i+1}" for i in range(option_count)],
-#                 "error": str(e)
-#             })
-
-#     await db["uploads"].update_one(
-#         {"_id": latest_cv["_id"]},
-#         {"$set": {"anchor_questions_with_options": suggestions}}
-#     )
-
-#     return {"success": True, "suggestions": suggestions}
 
 async def generate_anchor_attribute_options(user_id: str, questions, model, get_database):
     """
@@ -1369,18 +618,9 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
     # ----------------------------------------------------------
     # RANDOM NOISE + VARIATION KEY
     # ----------------------------------------------------------
-    style_noise_pool = [
-        "use uncommon synonyms",
-        "reorder ideas differently",
-        "make phrasing more concise",
-        "add creative wording twists",
-        "slightly formal tone",
-        "slightly casual tone",
-        "shuffle activity order",
-        "split compound ideas differently"
-    ]
-    random.shuffle(style_noise_pool)
-    style_noise = ", ".join(style_noise_pool[:3])
+    noise_pool = list(STYLE_NOISE_POOL)
+    random.shuffle(noise_pool)
+    style_noise = ", ".join(noise_pool[:3])
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
 
     async def _fetch_anchor_option(q):
@@ -1394,39 +634,13 @@ async def generate_anchor_attribute_options(user_id: str, questions, model, get_
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 2 * len(parameter_list)
 
-        variation_instructions = (
-            "- Ensure each execution produces DIFFERENT wording.\n"
-            "- Randomly split, merge, or rephrase phrases from context.\n"
-            "- Introduce synonyms or shuffle words.\n"
-            "- Do NOT invent anything not present in the context.\n"
-            f"- Apply variation rules: {style_noise}\n"
-        )
-
-        prompt = (
-            "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
-            "Generate options inspired by the user’s Personal Interests, Hobbies, Exploration Interests, "
-            "Motivation Drivers, Motivating Activities, and Achievements—without directly copying their context. "
-            "Infer the user’s underlying nature (e.g., creative, organized, exploratory) and tailor the options "
-            "to reflect that. Ensure the options remain relevant to the user’s job title and aligned with their "
-            "inferred personality and interests.\n\n"
-            "Also generate options based on the content of the question, ensuring they introduce new elements "
-            "that are not already included in the resume/CV but relatable to the job title.\n\n"
-            f"STRICT KNOWLEDGE BASE (use ONLY this content, no invention):\n{combined_context}\n\n"
-            f"Target parameters: {', '.join(parameter_list)}\n"
-            f"Question: {question_text}\n\n"
-            "Instructions:\n"
-            f"- Generate EXACTLY {option_count} options.\n"
-            "- Each option must rephrase or summarize ideas from the context.\n"
-            "- Keep options SHORT (2–5 words).\n"
-            "- Start each option with a CAPITAL letter.\n"
-            "- No numbers, bullets, or labels.\n"
-            "- All options must be distinct.\n"
-            f"{variation_instructions}"
-            f"- Variation key: {variation_key}\n\n"
-            "Respond ONLY in JSON format:\n"
-            "{{\n"
-            "  \"options\": [\"<Short phrase 1>\", \"<Short phrase 2>\", ...]\n"
-            "}}\n"
+        prompt = ANCHOR_OPTIONS_WITH_CV_PROMPT.format(
+            context=combined_context,
+            parameters=", ".join(parameter_list),
+            question_text=question_text,
+            option_count=option_count,
+            variation_instructions=VARIATION_INSTRUCTIONS.format(style_noise=style_noise),
+            variation_key=variation_key,
         )
 
         try:
@@ -1541,23 +755,11 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = 5 if len(parameter_list) == 1 else 2 * len(parameter_list)
 
-        prompt = (
-            "You are an AI assistant generating short, career-related multiple-choice options.\n\n"
-            f"Audience Type: {audience_type}\n\n"
-            f"Missing CV Context:\n{context_str}\n\n"
-            f"Question: {question_text}\n\n"
-            "Respond ONLY in JSON format:\n"
-            "{{\n"
-            "  \"options\": [\n"
-            "    \"<short phrase>\",\n"
-            "    \"<short phrase>\"\n"
-            "  ]\n"
-            "}}\n\n"
-            "RULES:\n"
-            f"- Provide EXACTLY {option_count} concise, distinct options.\n"
-            "- Keep each option 2–5 words long.\n"
-            "- Avoid numbering or letters (no A/B/C/... prefixes).\n"
-            "- Make sure they fit the question meaningfully."
+        prompt = JOB_ATTRIBUTE_OPTIONS_WITHOUT_CV_PROMPT.format(
+            audience_type=audience_type,
+            context_str=context_str,
+            question_text=question_text,
+            option_count=option_count,
         )
 
         try:
@@ -1668,18 +870,9 @@ async def generate_anchor_options_from_answers_without_cv(
     context_sample = "\n".join(non_empty_texts)
 
     variation_key = f"{uuid.uuid4()}-{datetime.utcnow().timestamp()}"
-    style_noise_pool = [
-        "use uncommon synonyms",
-        "reorder ideas differently",
-        "make phrasing more concise",
-        "add creative wording twists",
-        "slightly formal tone",
-        "slightly casual tone",
-        "shuffle activity order",
-        "split compound ideas differently",
-    ]
-    random.shuffle(style_noise_pool)
-    style_noise = ", ".join(style_noise_pool[:3])
+    noise_pool = list(STYLE_NOISE_POOL)
+    random.shuffle(noise_pool)
+    style_noise = ", ".join(noise_pool[:3])
 
     async def _fetch_anchor_without_cv(q):
         parameter = q.get("parameter")
@@ -1692,32 +885,14 @@ async def generate_anchor_options_from_answers_without_cv(
         parameter_list = [p.strip() for p in parameter.split("+")]
         option_count = OPTIONS_PER_PARAMETER * len(parameter_list)
 
-        variation_instructions = (
-            "- Ensure each execution produces DIFFERENT wording, even if the free-text is unchanged.\n"
-            "- Randomly split, merge, or rephrase phrases so that no two runs look the same.\n"
-            "- Introduce synonyms, shuffle word order, or shorten differently.\n"
-            "- Do NOT invent anything that is not explicitly present in the free-text answers.\n"
-            f"- Apply these random variation rules: {style_noise}\n"
-        )
-
-        prompt = (
-            "You are an AI assistant generating multiple-choice options for career-related questions.\n\n"
-            f"STRICT KNOWLEDGE BASE (rephrase ONLY from this, do not add new ideas):\n{context_sample}\n\n"
-            f"Target sub-parameters: {', '.join(parameter_list)}\n"
-            f"Question: {question_text}\n\n"
-            "Instructions:\n"
-            f"- Generate EXACTLY {option_count} short options.\n"
-            "- Each option must be a direct rephrasing, splitting, or summarizing of the free-text answers.\n"
-            "- DO NOT invent anything that is not explicitly present in the free-text answers.\n"
-            "- Keep each option SHORT (2–5 words).\n"
-            f"{variation_instructions}"
-            f"- Variation key (for uniqueness): {variation_key}\n\n"
-            "Respond ONLY in JSON format:\n"
-            "{{\n"
-            "  \"options\": [\n"
-            + ",\n".join(["    \"<short phrase>\"" for _ in range(option_count)])
-            + "\n  ]\n"
-            "}}"
+        prompt = ANCHOR_OPTIONS_WITHOUT_CV_PROMPT.format(
+            context=context_sample,
+            parameters=", ".join(parameter_list),
+            question_text=question_text,
+            option_count=option_count,
+            variation_instructions=VARIATION_INSTRUCTIONS.format(style_noise=style_noise),
+            variation_key=variation_key,
+            option_placeholders=",\n".join(["    \"<short phrase>\"" for _ in range(option_count)]),
         )
 
         try:
