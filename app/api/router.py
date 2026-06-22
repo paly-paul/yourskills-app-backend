@@ -48,17 +48,15 @@ def get_llm_model():
     return gemini_model
 
 
-async def _gemini_sync_with_retry(contents, generation_config, max_retries: int = 4):
-    """Run synchronous generate_content in a thread with exponential backoff on 429."""
-    import asyncio as _asyncio
+async def _gemini_async_with_retry(contents, generation_config, max_retries: int = 4):
+    """Call generate_content_async with exponential backoff on 429."""
     delay = 2.0
     for attempt in range(max_retries):
         t0 = time.time()
         try:
             logger.info(f"[GEMINI CALL] caller=summary/model | attempt={attempt+1}")
-            response = await _asyncio.to_thread(
-                gemini_model.generate_content,
-                contents=contents,
+            response = await gemini_model.generate_content_async(
+                contents,
                 generation_config=generation_config,
             )
             logger.info(f"[GEMINI CALL] caller=summary/model | SUCCESS | attempt={attempt+1} | time={round(time.time()-t0,2)}s")
@@ -68,7 +66,7 @@ async def _gemini_sync_with_retry(contents, generation_config, max_retries: int 
             is_rate_limit = "429" in err or "ResourceExhausted" in err or "quota" in err.lower()
             if is_rate_limit and attempt < max_retries - 1:
                 logger.warning(f"[GEMINI CALL] caller=summary/model | RATE LIMIT | attempt={attempt+1} | retrying in {delay}s")
-                await _asyncio.sleep(delay)
+                await asyncio.sleep(delay)
                 delay *= 2
                 continue
             logger.error(f"[GEMINI CALL] caller=summary/model | FAILED | attempt={attempt+1} | time={round(time.time()-t0,2)}s | error={err[:200]}")
@@ -227,7 +225,7 @@ async def extract_cv(
 
     try:
         # ---------------- EXTRACT RESUME DATA ----------------
-        data = await asyncio.to_thread(extract_cv_data_from_file, tmp_path, file.content_type)
+        data = await extract_cv_data_from_file(tmp_path, file.content_type)
     finally:
         os.unlink(tmp_path)
 
@@ -1417,7 +1415,7 @@ async def extract_cv_no_auth(
         tmp_path = tmp.name
 
     try:
-        data = await asyncio.to_thread(extract_cv_data_from_file, tmp_path, file.content_type)
+        data = await extract_cv_data_from_file(tmp_path, file.content_type)
     finally:
         os.unlink(tmp_path)
 
@@ -1848,7 +1846,7 @@ Convert it into a **short, buzzword-style phrase**.
 Input JSON:
 {json.dumps(parsed_resume)}
 """
-    response = await _gemini_sync_with_retry(
+    response = await _gemini_async_with_retry(
         contents=[extract_prompt],
         generation_config=genai.types.GenerationConfig(
             response_mime_type="application/json",

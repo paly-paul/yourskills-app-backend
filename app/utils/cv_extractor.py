@@ -510,8 +510,8 @@ def extract_job_role(parsed_json):
 #         return {"error": "Failed to parse CV data"}
 
 
-def extract_cv_data_from_file(filepath: str, mime_type: str):
-    
+async def extract_cv_data_from_file(filepath: str, mime_type: str):
+
     prompt = """
 You are a Senior HR Recruitment, Talent Analyst, and Skill Intelligence Expert trained to extract accurate structured information from resumes, profiles, or people data.
 
@@ -779,7 +779,7 @@ FINAL RULES
 
         logger.info("[GEMINI CALL] caller=extract_cv_data_from_file | sending CV file to Gemini for parsing")
         t0 = time.time()
-        response = model.generate_content(content_input, stream=False)
+        response = await _gemini_with_retry(content_input, caller="extract_cv_data_from_file")
         logger.info(f"[GEMINI CALL] caller=extract_cv_data_from_file | SUCCESS | time={round(time.time()-t0,2)}s")
         response_text = response.text.strip()
 
