@@ -227,31 +227,23 @@ async def get_audience_questions_service(db, current_user):
     # -------------------------------
     # GENERATE OPTIONS DYNAMICALLY
     # -------------------------------
+    # REUSE SAVED OPTIONS — only regenerate if missing
+    # -------------------------------
 
-    job_questions = matching_job.get("questions", [])
-
-    job_options = await generate_job_attribute_options(
-        parsed_data,
-        job_questions
-    )
-
-    questions = job_options.get("suggestions", [])
-
-    # OPTIONAL:
-    # save regenerated questions
-    await uploads_collection.update_one(
-        {"_id": latest_cv["_id"]},
-        {
-            "$set": {
-                "job_questions_with_options": questions
-            }
-        }
-    )
+    job_questions_with_options = latest_cv.get("job_questions_with_options", [])
+    if not job_questions_with_options:
+        job_questions = matching_job.get("questions", [])
+        job_options = await generate_job_attribute_options(parsed_data, job_questions)
+        job_questions_with_options = job_options.get("suggestions", [])
+        await uploads_collection.update_one(
+            {"_id": latest_cv["_id"]},
+            {"$set": {"job_questions_with_options": job_questions_with_options}}
+        )
 
     return {
         "success": True,
         "audienceType": audience_type,
-        "questions": questions,
+        "questions": job_questions_with_options,
     }
 
 

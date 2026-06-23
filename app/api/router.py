@@ -1425,7 +1425,14 @@ async def extract_cv_no_auth(
     cv_id_str = str(saved_cv.get("_id"))
 
     softskills_suggestions, technical_skills_suggestions = [], []
-    if not data.get("Skills", {}).get("SoftSkills") or not data.get("Skills", {}).get("HardSkills"):
+    has_llm_skills = (
+        data.get("LLM_Generated_Soft_Skills")
+        or data.get("LLM_Generated_Technical_Skills")
+    )
+    if not has_llm_skills and (
+        not data.get("Skills", {}).get("SoftSkills")
+        or not data.get("Skills", {}).get("HardSkills")
+    ):
         try:
             suggestions = await generate_missing_field_suggestions(data)
         except Exception:
