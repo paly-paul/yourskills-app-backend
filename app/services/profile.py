@@ -376,9 +376,8 @@ async def get_questions_excluding_parameters(
 
         await generate_anchor_attribute_options(
             user_id=str(current_user["_id"]),
-            questions=system_questions, 
+            questions=system_questions,
             model=model,
-            get_database=get_database
         )
 
         latest_cv = await uploads_collection.find_one({"_id": latest_cv["_id"]})
@@ -570,7 +569,6 @@ async def get_remaining_anchor_questions_without_cv(
             user_id=user_id,
             questions=system_questions,
             model=model,
-            get_database=lambda: db,
         )
         latest_proceed_list = await db["proceed_without_cv"].find(
             {"user_id": user_id}

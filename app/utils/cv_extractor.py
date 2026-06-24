@@ -519,7 +519,7 @@ async def get_latest_user_cv(db, user_id: str):
     return latest_cv
 
 
-async def generate_anchor_attribute_options(user_id: str, questions, model, get_database):
+async def generate_anchor_attribute_options(user_id: str, questions, model):
     """
     Generate multiple-choice options for Anchor attributes based on:
     - Personal Interests + Hobbies + Exploration Interest + Motivation Drivers + Motivating Activities
@@ -837,7 +837,7 @@ async def generate_job_attribute_options_without_cv(user_id: str, db) -> dict:
 
 
 async def generate_anchor_options_from_answers_without_cv(
-    user_id: str, questions, model, get_database
+    user_id: str, questions, model
 ) -> Dict[str, Any]:
     """
     Generate multiple-choice options for Anchor attributes based ONLY on:
